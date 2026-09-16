@@ -8,6 +8,9 @@ const App = {
     currentView: 'dashboard',
     activePeriod: '',
     inventorySubTab: 'inicial',
+    evolucionTab: 'proveedor',
+    supplierPurchasesChart: null,
+    productPriceChart: null,
     pendingProductForPurchase: false,
     activeUser: null,
     sidebarHidden: false,
@@ -137,7 +140,7 @@ const App = {
     },
 
     getFirstAllowedView() {
-        const order = ['dashboard', 'inventarios', 'productos', 'compras-nueva', 'ordenes-compra', 'proveedores', 'cmv', 'compras-historial', 'ajustes'];
+        const order = ['dashboard', 'inventarios', 'productos', 'compras-nueva', 'ordenes-compra', 'proveedores', 'cmv', 'compras-historial', 'evolucion-compras', 'ajustes'];
         for (let v of order) {
             if (StorageManager.hasPermission(this.activeUser, v)) {
                 return v;
@@ -436,6 +439,9 @@ const App = {
                 categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
             prodCatFilter.value = currentVal;
         }
+
+        // 6. Selectores en Evolución de Compras
+        this.populateEvolucionDropdowns();
     },
 
     navigate(viewId, params = {}) {
@@ -473,6 +479,7 @@ const App = {
             'cmv': { title: 'Control de CMV Mensual', sub: 'Inventario inicial, compras, conteo final y costo de mercadería vendida (PPP)' },
             'productos': { title: 'Insumos y Categorías', sub: 'Catálogo de existencias, stock de seguridad y proveedor habitual' },
             'compras-historial': { title: 'Historial de Facturas y Pagos', sub: 'Registro de facturas, cuentas a pagar y control de cancelaciones' },
+            'evolucion-compras': { title: 'Evolución de Compras y Precios', sub: 'Historial de compras por proveedor y evolución histórica de costos por insumo' },
             'ajustes': { title: 'Configuración y Respaldo', sub: 'Control de usuarios y permisos (RBAC), régimen impositivo y copias de seguridad' }
         };
 
@@ -513,17 +520,14 @@ const App = {
             this.renderProductsTable();
         } else if (viewId === 'compras-historial') {
             this.renderPurchasesTable();
+        } else if (viewId === 'evolucion-compras') {
+            this.renderEvolucionComprasView(params);
         } else if (viewId === 'ajustes') {
             this.renderSettings();
             this.renderUsersTable();
         }
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-
-    toggleSidebar() {
-        const sidebar = document.querySelector('aside');
-        sidebar.classList.toggle('hidden');
     },
 
     showToast(message, type = 'success') {
@@ -776,6 +780,9 @@ const App = {
                 <input type="number" step="any" min="0.001" required value="${defaultQty}" oninput="App.calculatePurchaseTotals(this, 'qty')" class="row-qty-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
             </td>
             <td class="py-2 px-2">
+                <input type="number" step="any" min="0" required value="${defaultCost}" oninput="App.calculatePurchaseTotals(this, 'cost')" class="row-cost-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
+            </td>
+            <td class="py-2 px-2">
                 <div class="flex items-center gap-1">
                     <div class="relative flex-1 min-w-0" title="Descuento en porcentaje (%)">
                         <input type="number" step="any" min="0" max="100" placeholder="0" value="${defaultDiscountPct || ''}" oninput="App.updateRowDiscountPct(this)" class="row-discount-pct w-full bg-amber-50/50 border border-amber-300 rounded-lg pl-1.5 pr-4 py-1.5 text-xs font-bold text-amber-800 text-right focus:ring-2 focus:ring-amber-500 focus:outline-none">
@@ -786,9 +793,6 @@ const App = {
                         <span class="absolute right-1 top-1.5 text-[10px] text-amber-600 font-bold pointer-events-none">$</span>
                     </div>
                 </div>
-            </td>
-            <td class="py-2 px-2">
-                <input type="number" step="any" min="0" required value="${defaultCost}" oninput="App.calculatePurchaseTotals(this, 'cost')" class="row-cost-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
             </td>
             <td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">
                 $ 0.00
@@ -2875,6 +2879,592 @@ const App = {
         const month = document.getElementById('purchasesMonthFilter')?.value || '';
         const status = document.getElementById('purchasesPaymentFilter')?.value || 'all';
         PurchaseManager.exportPurchasesToCSV(month, status);
+    },
+
+    // ==========================================
+    // MÓDULO EVOLUCIÓN DE COMPRAS Y PRECIOS
+    // ==========================================
+    switchEvolucionTab(tab) {
+        this.evolucionTab = tab;
+        const btnProv = document.getElementById('tabEvolProveedor');
+        const btnIns = document.getElementById('tabEvolInsumo');
+        const subProv = document.getElementById('subtabEvolProveedor');
+        const subIns = document.getElementById('subtabEvolInsumo');
+
+        if (tab === 'proveedor') {
+            if (btnProv) btnProv.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all bg-white text-slate-800 shadow-sm';
+            if (btnIns) btnIns.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-600 hover:text-slate-900';
+            if (subProv) subProv.classList.remove('hidden');
+            if (subIns) subIns.classList.add('hidden');
+            this.renderEvolucionProveedor();
+        } else {
+            if (btnIns) btnIns.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all bg-white text-slate-800 shadow-sm';
+            if (btnProv) btnProv.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-600 hover:text-slate-900';
+            if (subIns) subIns.classList.remove('hidden');
+            if (subProv) subProv.classList.add('hidden');
+            this.renderEvolucionInsumo();
+        }
+    },
+
+    renderEvolucionComprasView(params = {}) {
+        this.populateEvolucionDropdowns();
+        if (params.tab) {
+            this.switchEvolucionTab(params.tab);
+        } else {
+            this.switchEvolucionTab(this.evolucionTab || 'proveedor');
+        }
+    },
+
+    populateEvolucionDropdowns() {
+        const suppliers = StorageManager.getSuppliers();
+        const products = StorageManager.getProducts();
+
+        // 1. Selector de Proveedor en Pestaña Proveedor
+        const supSelect = document.getElementById('evolSupplierSelect');
+        if (supSelect) {
+            const curVal = supSelect.value;
+            supSelect.innerHTML = '<option value="">-- Todos los Proveedores --</option>' +
+                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            supSelect.value = curVal;
+        }
+
+        // 2. Selector de Insumo en Pestaña Insumos
+        const prodSelect = document.getElementById('evolProductSelect');
+        if (prodSelect) {
+            const curVal = prodSelect.value;
+            prodSelect.innerHTML = products.map(p => `<option value="${p.id}">${p.name} (${p.code})</option>`).join('');
+            if (curVal && products.some(p => p.id === curVal)) {
+                prodSelect.value = curVal;
+            } else if (products.length > 0) {
+                prodSelect.value = products[0].id;
+            }
+        }
+
+        // 3. Filtro opcional de Proveedor en Pestaña Insumos
+        const prodSupFilter = document.getElementById('evolProdSupplierFilter');
+        if (prodSupFilter) {
+            const curVal = prodSupFilter.value;
+            prodSupFilter.innerHTML = '<option value="">-- Todos los Proveedores --</option>' +
+                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            prodSupFilter.value = curVal;
+        }
+    },
+
+    renderEvolucionProveedor() {
+        const supSelect = document.getElementById('evolSupplierSelect');
+        const selectedSupId = supSelect?.value || '';
+        const dateFrom = document.getElementById('evolDateFrom')?.value || '';
+        const dateTo = document.getElementById('evolDateTo')?.value || '';
+
+        let purchases = StorageManager.getPurchases();
+        const settings = StorageManager.getSettings();
+        const curr = settings.currency || '$';
+
+        // Filtrar por proveedor
+        if (selectedSupId) {
+            const sup = StorageManager.getSupplierById(selectedSupId);
+            const supName = sup ? sup.name.toLowerCase() : '';
+            purchases = purchases.filter(p => (p.supplierId && p.supplierId === selectedSupId) || (p.supplier && p.supplier.toLowerCase() === supName));
+        }
+
+        // Filtrar por rango de fechas
+        if (dateFrom) {
+            purchases = purchases.filter(p => p.date >= dateFrom);
+        }
+        if (dateTo) {
+            purchases = purchases.filter(p => p.date <= dateTo);
+        }
+
+        // Ordenar por fecha descendente para la tabla
+        purchases.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+
+        // Calcular KPIs
+        let totalPurchased = 0;
+        let invoiceCount = purchases.length;
+        const uniqueItemsSet = new Set();
+
+        purchases.forEach(p => {
+            totalPurchased += (p.totalInvoice || p.totalCost || p.netSubtotal || 0);
+            (p.items || []).forEach(it => {
+                if (it.productId) uniqueItemsSet.add(it.productId);
+                else if (it.productName) uniqueItemsSet.add(it.productName);
+            });
+        });
+
+        const avgPurchase = invoiceCount > 0 ? (totalPurchased / invoiceCount) : 0;
+
+        const kpiTotalEl = document.getElementById('kpiEvolSupTotal');
+        if (kpiTotalEl) kpiTotalEl.textContent = `${curr} ${totalPurchased.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+        const kpiCountEl = document.getElementById('kpiEvolSupCount');
+        if (kpiCountEl) kpiCountEl.textContent = invoiceCount;
+        const kpiAvgEl = document.getElementById('kpiEvolSupAverage');
+        if (kpiAvgEl) kpiAvgEl.textContent = `${curr} ${avgPurchase.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+        const kpiUniqueEl = document.getElementById('kpiEvolSupUniqueItems');
+        if (kpiUniqueEl) kpiUniqueEl.textContent = uniqueItemsSet.size;
+
+        // Renderizar tabla
+        const tbody = document.getElementById('evolSupplierTableBody');
+        const rowCountEl = document.getElementById('evolSupplierRowCount');
+        if (rowCountEl) rowCountEl.textContent = `${invoiceCount} facturas encontradas`;
+
+        if (!tbody) return;
+
+        if (purchases.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No se registran compras para el proveedor o período seleccionado.</td></tr>';
+        } else {
+            tbody.innerHTML = purchases.map(p => {
+                const itemsSummary = (p.items || []).map(it => `${it.productName} (${it.quantity} ${it.unit || 'u.'})`).join(', ');
+                const isPaid = (p.paymentStatus || 'pagada') === 'pagada';
+                const statusBadge = isPaid
+                    ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">✓ Pagada</span>'
+                    : '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded-full">⏳ Pendiente</span>';
+
+                let rowDiscountTotal = 0;
+                (p.items || []).forEach(it => {
+                    rowDiscountTotal += (it.discountAmount || 0);
+                });
+
+                return `
+                    <tr class="table-row-hover text-xs">
+                        <td class="py-2.5 px-3 font-mono font-medium text-slate-700">${p.date || '-'}</td>
+                        <td class="py-2.5 px-3 font-semibold text-slate-800">${p.invoiceNumber || 'S/N'}</td>
+                        <td class="py-2.5 px-4 font-bold text-slate-700">${p.supplier || '-'}</td>
+                        <td class="py-2.5 px-4 text-slate-500 max-w-xs truncate" title="${itemsSummary}">${itemsSummary || '-'}</td>
+                        <td class="py-2.5 px-3 text-center">${statusBadge}</td>
+                        <td class="py-2.5 px-3 text-right font-medium text-slate-600">${curr} ${(p.netSubtotal || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                        <td class="py-2.5 px-3 text-right text-amber-600 font-semibold">${rowDiscountTotal > 0 ? `- ${curr} ${rowDiscountTotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}` : '-'}</td>
+                        <td class="py-2.5 px-4 text-right font-black text-slate-900">${curr} ${(p.totalInvoice || p.totalCost || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                        <td class="py-2.5 px-2 text-center">
+                            <button onclick="App.openPaymentModal('${p.id}')" class="text-slate-400 hover:text-sky-600 p-1" title="Ver comprobante y pago">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Renderizar Gráfico de Evolución Mensual
+        this.renderSupplierPurchasesChart(purchases);
+    },
+
+    renderSupplierPurchasesChart(purchases) {
+        const canvas = document.getElementById('supplierPurchasesChart');
+        if (!canvas) return;
+
+        // Agrupar por mes (YYYY-MM) cronológicamente
+        const monthlyTotals = {};
+        purchases.forEach(p => {
+            if (!p.date) return;
+            const month = p.date.substring(0, 7);
+            const total = (p.totalInvoice || p.totalCost || p.netSubtotal || 0);
+            monthlyTotals[month] = (monthlyTotals[month] || 0) + total;
+        });
+
+        const sortedMonths = Object.keys(monthlyTotals).sort();
+        const labels = sortedMonths.map(m => {
+            const [y, mm] = m.split('-');
+            const d = new Date(parseInt(y), parseInt(mm) - 1, 1);
+            return d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
+        });
+        const dataValues = sortedMonths.map(m => Number(monthlyTotals[m].toFixed(2)));
+
+        if (this.supplierPurchasesChart) {
+            this.supplierPurchasesChart.destroy();
+        }
+
+        if (typeof Chart === 'undefined') return;
+
+        const ctx = canvas.getContext('2d');
+        this.supplierPurchasesChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels.length > 0 ? labels : ['Sin datos'],
+                datasets: [{
+                    label: 'Total Facturado ($)',
+                    data: dataValues.length > 0 ? dataValues : [0],
+                    backgroundColor: 'rgba(13, 148, 136, 0.75)',
+                    borderColor: 'rgb(13, 148, 136)',
+                    borderWidth: 1.5,
+                    borderRadius: 6,
+                    maxBarThickness: 45
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return ` $ ${ctx.parsed.y.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(val) {
+                                return '$ ' + val.toLocaleString('es-ES');
+                            },
+                            font: { size: 10 }
+                        },
+                        grid: { color: 'rgba(226, 232, 240, 0.6)' }
+                    },
+                    x: {
+                        ticks: { font: { size: 10 } },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    },
+
+    renderEvolucionInsumo() {
+        const prodSelect = document.getElementById('evolProductSelect');
+        const selectedProdId = prodSelect?.value || '';
+        const supFilter = document.getElementById('evolProdSupplierFilter')?.value || '';
+        const dateFrom = document.getElementById('evolProdDateFrom')?.value || '';
+
+        const settings = StorageManager.getSettings();
+        const curr = settings.currency || '$';
+
+        if (!selectedProdId) {
+            return;
+        }
+
+        const product = StorageManager.getProductById(selectedProdId);
+        const prodLabel = document.getElementById('evolProdChartLabel');
+        if (prodLabel && product) {
+            prodLabel.textContent = `${product.name} (Unidad: ${product.unit || 'u.'})`;
+        }
+
+        // Buscar todas las compras que contengan este insumo
+        const purchases = StorageManager.getPurchases();
+        const itemPurchases = [];
+
+        purchases.forEach(p => {
+            if (dateFrom && p.date < dateFrom) return;
+            if (supFilter) {
+                const sup = StorageManager.getSupplierById(supFilter);
+                const supName = sup ? sup.name.toLowerCase() : '';
+                if (p.supplierId !== supFilter && (!p.supplier || p.supplier.toLowerCase() !== supName)) {
+                    return;
+                }
+            }
+
+            (p.items || []).forEach(it => {
+                if (it.productId === selectedProdId || (product && it.productName && it.productName.toLowerCase() === product.name.toLowerCase())) {
+                    const grossCost = it.unitCost || 0;
+                    const subtotal = it.subtotal || (it.quantity * grossCost);
+                    // Costo unitario neto real pagado con descuento
+                    const netUnitCost = it.quantity > 0 ? Number((subtotal / it.quantity).toFixed(2)) : grossCost;
+
+                    itemPurchases.push({
+                        date: p.date || p.createdAt?.slice(0, 10) || '',
+                        invoiceNumber: p.invoiceNumber || 'S/N',
+                        supplier: p.supplier || 'Proveedor',
+                        supplierId: p.supplierId || '',
+                        quantity: it.quantity || 0,
+                        unit: it.unit || product?.unit || 'u.',
+                        grossCost: grossCost,
+                        discountPercent: it.discountPercent || 0,
+                        discountAmount: it.discountAmount || 0,
+                        netUnitCost: netUnitCost,
+                        subtotal: subtotal
+                    });
+                }
+            });
+        });
+
+        // Ordenar cronológicamente (más antiguo primero) para calcular variaciones y gráfico
+        itemPurchases.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        // Calcular variación % respecto a la compra anterior
+        for (let i = 0; i < itemPurchases.length; i++) {
+            if (i === 0) {
+                itemPurchases[i].varPercent = 0;
+                itemPurchases[i].hasPrevious = false;
+            } else {
+                const prevCost = itemPurchases[i - 1].netUnitCost;
+                const curCost = itemPurchases[i].netUnitCost;
+                if (prevCost > 0) {
+                    itemPurchases[i].varPercent = Number((((curCost - prevCost) / prevCost) * 100).toFixed(1));
+                } else {
+                    itemPurchases[i].varPercent = 0;
+                }
+                itemPurchases[i].hasPrevious = true;
+            }
+        }
+
+        // Calcular KPIs
+        let lastPrice = product?.costPrice || 0;
+        let lastDate = 'Catálogo actual';
+        let minPrice = lastPrice;
+        let maxPrice = lastPrice;
+        let totalVariation = 0;
+
+        if (itemPurchases.length > 0) {
+            const lastItem = itemPurchases[itemPurchases.length - 1];
+            lastPrice = lastItem.netUnitCost;
+            lastDate = lastItem.date;
+
+            const allPrices = itemPurchases.map(it => it.netUnitCost).filter(pr => pr > 0);
+            if (allPrices.length > 0) {
+                minPrice = Math.min(...allPrices);
+                maxPrice = Math.max(...allPrices);
+                const firstPrice = allPrices[0];
+                if (firstPrice > 0) {
+                    totalVariation = Number((((lastPrice - firstPrice) / firstPrice) * 100).toFixed(1));
+                }
+            }
+        }
+
+        const lastPriceEl = document.getElementById('kpiEvolProdLastPrice');
+        if (lastPriceEl) lastPriceEl.textContent = `${curr} ${lastPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+        const lastDateEl = document.getElementById('kpiEvolProdLastDate');
+        if (lastDateEl) lastDateEl.textContent = lastDate ? `Última: ${lastDate}` : 'Sin compras registradas';
+        const minPriceEl = document.getElementById('kpiEvolProdMinPrice');
+        if (minPriceEl) minPriceEl.textContent = `${curr} ${minPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+        const maxPriceEl = document.getElementById('kpiEvolProdMaxPrice');
+        if (maxPriceEl) maxPriceEl.textContent = `${curr} ${maxPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+
+        const varEl = document.getElementById('kpiEvolProdVariation');
+        if (varEl) {
+            const varSign = totalVariation > 0 ? `+${totalVariation}%` : `${totalVariation}%`;
+            varEl.textContent = varSign;
+            if (totalVariation > 0) {
+                varEl.className = 'text-2xl font-black text-red-600 mt-1';
+            } else if (totalVariation < 0) {
+                varEl.className = 'text-2xl font-black text-emerald-600 mt-1';
+            } else {
+                varEl.className = 'text-2xl font-black text-slate-800 mt-1';
+            }
+        }
+
+        // Renderizar tabla (orden inverso para mostrar las compras más recientes primero)
+        const displayList = [...itemPurchases].reverse();
+        const tbody = document.getElementById('evolProdTableBody');
+        const rowCountEl = document.getElementById('evolProdRowCount');
+        if (rowCountEl) rowCountEl.textContent = `${displayList.length} compras registradas`;
+
+        if (tbody) {
+            if (displayList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">No se han registrado compras para el insumo "${product?.name || ''}" con los filtros actuales.</td></tr>`;
+            } else {
+                tbody.innerHTML = displayList.map(it => {
+                    let varBadge = '<span class="text-slate-400">-</span>';
+                    if (it.hasPrevious) {
+                        if (it.varPercent > 0) {
+                            varBadge = `<span class="inline-flex items-center gap-1 font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-[11px]"><i class="fa-solid fa-arrow-trend-up"></i> +${it.varPercent}%</span>`;
+                        } else if (it.varPercent < 0) {
+                            varBadge = `<span class="inline-flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[11px]"><i class="fa-solid fa-arrow-trend-down"></i> ${it.varPercent}%</span>`;
+                        } else {
+                            varBadge = '<span class="font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">0.0%</span>';
+                        }
+                    }
+
+                    let discLabel = '-';
+                    if (it.discountAmount > 0 || it.discountPercent > 0) {
+                        discLabel = `<span class="text-amber-700 font-semibold">${it.discountPercent > 0 ? `${it.discountPercent}% ` : ''}${it.discountAmount > 0 ? `(-$${it.discountAmount})` : ''}</span>`;
+                    }
+
+                    return `
+                        <tr class="table-row-hover text-xs">
+                            <td class="py-2.5 px-3 font-mono font-medium text-slate-700">${it.date}</td>
+                            <td class="py-2.5 px-4 font-bold text-slate-800">${it.supplier}</td>
+                            <td class="py-2.5 px-3 font-semibold text-slate-600">${it.invoiceNumber}</td>
+                            <td class="py-2.5 px-3 text-right font-bold text-slate-800">${it.quantity}</td>
+                            <td class="py-2.5 px-2 text-center text-slate-500">${it.unit}</td>
+                            <td class="py-2.5 px-3 text-right text-slate-500">${curr} ${it.grossCost.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                            <td class="py-2.5 px-3 text-right">${discLabel}</td>
+                            <td class="py-2.5 px-3 text-right font-black text-sky-700">${curr} ${it.netUnitCost.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                            <td class="py-2.5 px-3 text-right font-bold text-slate-800">${curr} ${it.subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                            <td class="py-2.5 px-3 text-center">${varBadge}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Renderizar Gráfico de Línea de Evolución de Precios
+        this.renderProductPriceChart(itemPurchases, product);
+    },
+
+    renderProductPriceChart(itemPurchases, product) {
+        const canvas = document.getElementById('productPriceEvolutionChart');
+        if (!canvas) return;
+
+        if (this.productPriceChart) {
+            this.productPriceChart.destroy();
+        }
+
+        if (typeof Chart === 'undefined') return;
+
+        const labels = itemPurchases.map(it => `${it.date} (${it.supplier.split(' ')[0]})`);
+        const dataValues = itemPurchases.map(it => it.netUnitCost);
+
+        const ctx = canvas.getContext('2d');
+        this.productPriceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels.length > 0 ? labels : ['Sin compras'],
+                datasets: [{
+                    label: `Costo Unitario Neto (${product?.unit || 'u.'})`,
+                    data: dataValues.length > 0 ? dataValues : [product?.costPrice || 0],
+                    borderColor: 'rgb(2, 132, 199)',
+                    backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.25,
+                    pointBackgroundColor: 'rgb(2, 132, 199)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return ` Costo Unit.: $ ${ctx.parsed.y.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        ticks: {
+                            callback: function(val) {
+                                return '$ ' + val.toLocaleString('es-ES');
+                            },
+                            font: { size: 10 }
+                        },
+                        grid: { color: 'rgba(226, 232, 240, 0.6)' }
+                    },
+                    x: {
+                        ticks: { font: { size: 10 } },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    },
+
+    resetEvolucionProveedorFilters() {
+        const s = document.getElementById('evolSupplierSelect');
+        if (s) s.value = '';
+        const df = document.getElementById('evolDateFrom');
+        if (df) df.value = '';
+        const dt = document.getElementById('evolDateTo');
+        if (dt) dt.value = '';
+        this.renderEvolucionProveedor();
+    },
+
+    exportEvolucionProveedorToCSV() {
+        const supSelect = document.getElementById('evolSupplierSelect');
+        const selectedSupId = supSelect?.value || '';
+        const dateFrom = document.getElementById('evolDateFrom')?.value || '';
+        const dateTo = document.getElementById('evolDateTo')?.value || '';
+
+        let purchases = StorageManager.getPurchases();
+        const settings = StorageManager.getSettings();
+
+        if (selectedSupId) {
+            const sup = StorageManager.getSupplierById(selectedSupId);
+            const supName = sup ? sup.name.toLowerCase() : '';
+            purchases = purchases.filter(p => (p.supplierId && p.supplierId === selectedSupId) || (p.supplier && p.supplier.toLowerCase() === supName));
+        }
+        if (dateFrom) purchases = purchases.filter(p => p.date >= dateFrom);
+        if (dateTo) purchases = purchases.filter(p => p.date <= dateTo);
+
+        purchases.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+
+        let csv = `HISTORIAL DE COMPRAS POR PROVEEDOR - ${settings.businessName}\r\n`;
+        csv += `Generado el: ${new Date().toLocaleDateString()}\r\n\r\n`;
+        csv += 'Fecha;Factura;Proveedor;Renglones;EstadoPago;SubtotalNeto;TotalFactura\r\n';
+
+        purchases.forEach(p => {
+            const itemsSummary = (p.items || []).map(it => `${it.productName} (${it.quantity} ${it.unit})`).join(' | ');
+            csv += `"${p.date || ''}";"${p.invoiceNumber || ''}";"${p.supplier || ''}";"${itemsSummary}";"${p.paymentStatus || 'pagada'}";"${p.netSubtotal || 0}";"${p.totalInvoice || p.totalCost || 0}"\r\n`;
+        });
+
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Evolucion_Compras_Proveedor_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    },
+
+    exportEvolucionInsumoToCSV() {
+        const prodSelect = document.getElementById('evolProductSelect');
+        const selectedProdId = prodSelect?.value || '';
+        const supFilter = document.getElementById('evolProdSupplierFilter')?.value || '';
+        const dateFrom = document.getElementById('evolProdDateFrom')?.value || '';
+
+        const product = StorageManager.getProductById(selectedProdId);
+        if (!product) return;
+
+        const purchases = StorageManager.getPurchases();
+        const rows = [];
+
+        purchases.forEach(p => {
+            if (dateFrom && p.date < dateFrom) return;
+            if (supFilter) {
+                const sup = StorageManager.getSupplierById(supFilter);
+                const supName = sup ? sup.name.toLowerCase() : '';
+                if (p.supplierId !== supFilter && (!p.supplier || p.supplier.toLowerCase() !== supName)) return;
+            }
+
+            (p.items || []).forEach(it => {
+                if (it.productId === selectedProdId || (it.productName && it.productName.toLowerCase() === product.name.toLowerCase())) {
+                    const grossCost = it.unitCost || 0;
+                    const subtotal = it.subtotal || (it.quantity * grossCost);
+                    const netUnitCost = it.quantity > 0 ? Number((subtotal / it.quantity).toFixed(2)) : grossCost;
+                    rows.push({
+                        date: p.date || '',
+                        supplier: p.supplier || '',
+                        invoice: p.invoiceNumber || '',
+                        quantity: it.quantity || 0,
+                        unit: it.unit || product.unit || 'u.',
+                        grossCost: grossCost,
+                        discountPercent: it.discountPercent || 0,
+                        discountAmount: it.discountAmount || 0,
+                        netUnitCost: netUnitCost,
+                        subtotal: subtotal
+                    });
+                }
+            });
+        });
+
+        rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        let csv = `EVOLUCION DE PRECIOS - INSUMO: ${product.name} (${product.code})\r\n`;
+        csv += `Generado el: ${new Date().toLocaleDateString()}\r\n\r\n`;
+        csv += 'Fecha;Proveedor;Factura;Cantidad;Unidad;CostoLista;DescuentoPct;DescuentoMonto;CostoNetoUnitario;Subtotal\r\n';
+
+        rows.forEach(r => {
+            csv += `"${r.date}";"${r.supplier}";"${r.invoice}";"${r.quantity}";"${r.unit}";"${r.grossCost}";"${r.discountPercent}%";"${r.discountAmount}";"${r.netUnitCost}";"${r.subtotal}"\r\n`;
+        });
+
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Evolucion_Precios_${product.code}_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
     },
 
     // ==========================================

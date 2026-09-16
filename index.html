@@ -109,6 +109,10 @@
                     <span>Historial y Pagos</span>
                     <span id="badgePendingCount" class="ml-auto text-[10px] bg-red-500/30 text-red-300 px-1.5 py-0.5 rounded font-bold hidden">0</span>
                 </button>
+                <button onclick="App.navigate('evolucion-compras')" id="nav-evolucion-compras" data-perm="evolucion-compras" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-arrow-trend-up w-5 text-center text-emerald-400"></i>
+                    <span>Evolución de Compras</span>
+                </button>
                 <button onclick="App.navigate('ajustes')" id="nav-ajustes" data-perm="ajustes" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
                     <i class="fa-solid fa-sliders w-5 text-center text-slate-400"></i>
                     <span>Configuración & Backups</span>
@@ -360,9 +364,9 @@
                                         <tr>
                                             <th class="py-3 px-3 w-4/12">Insumo / Producto</th>
                                             <th class="py-3 px-2 w-1/12 text-center">Unidad</th>
-                                            <th class="py-3 px-2 w-2/12">Cantidad</th>
-                                            <th class="py-3 px-2 w-2/12 text-center">Descuento (% / $)</th>
+                                            <th class="py-3 px-2 w-1/12">Cantidad</th>
                                             <th class="py-3 px-2 w-2/12">Costo Neto Unit. ($)</th>
+                                            <th class="py-3 px-2 w-2/12 text-center">Descuento (% / $)</th>
                                             <th class="py-3 px-3 w-2/12 text-right">Subtotal Neto ($)</th>
                                             <th class="py-3 px-2 text-center"></th>
                                         </tr>
@@ -1173,6 +1177,233 @@
                 </div>
             </section>
 
+            <!-- VIEW: EVOLUCIÓN DE COMPRAS Y PRECIOS -->
+            <section id="view-evolucion-compras" class="p-6 space-y-6 hidden animate-fade-in">
+                <!-- Sub-tabs navigation -->
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                    <div class="flex items-center gap-2 bg-slate-200/70 p-1 rounded-xl">
+                        <button onclick="App.switchEvolucionTab('proveedor')" id="tabEvolProveedor" class="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all bg-white text-slate-800 shadow-sm">
+                            <i class="fa-solid fa-truck-field text-teal-600"></i>
+                            <span>Historial por Proveedor</span>
+                        </button>
+                        <button onclick="App.switchEvolucionTab('insumo')" id="tabEvolInsumo" class="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-600 hover:text-slate-900">
+                            <i class="fa-solid fa-chart-line text-sky-600"></i>
+                            <span>Evolución de Precios por Insumo</span>
+                        </button>
+                    </div>
+
+                    <div class="text-xs text-slate-500 font-medium">
+                        <span id="evolucionSubtitleBadge" class="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200">
+                            Análisis cronológico de costos y compras
+                        </span>
+                    </div>
+                </div>
+
+                <!-- SUBTAB 1: HISTORIAL DE COMPRAS POR PROVEEDOR -->
+                <div id="subtabEvolProveedor" class="space-y-6">
+                    <!-- Filters bar -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 mb-1">Proveedor</label>
+                                <select id="evolSupplierSelect" onchange="App.renderEvolucionProveedor()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                                    <option value="">-- Todos los Proveedores --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 mb-1">Desde (Fecha)</label>
+                                <input type="date" id="evolDateFrom" onchange="App.renderEvolucionProveedor()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 mb-1">Hasta (Fecha)</label>
+                                <input type="date" id="evolDateTo" onchange="App.renderEvolucionProveedor()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div class="flex items-end gap-2 pt-2 lg:pt-0">
+                            <button onclick="App.resetEvolucionProveedorFilters()" class="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                <i class="fa-solid fa-rotate-left mr-1"></i> Limpiar
+                            </button>
+                            <button onclick="App.exportEvolucionProveedorToCSV()" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors whitespace-nowrap">
+                                <i class="fa-solid fa-file-excel"></i>
+                                <span>Exportar Excel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- KPIs Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Total Comprado ($)</span>
+                            <h4 id="kpiEvolSupTotal" class="text-2xl font-black text-slate-800 mt-1">$ 0.00</h4>
+                            <span id="kpiEvolSupPeriod" class="text-[10px] text-slate-400 mt-0.5 block">Período seleccionado</span>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Facturas Registradas</span>
+                            <h4 id="kpiEvolSupCount" class="text-2xl font-black text-teal-600 mt-1">0</h4>
+                            <span id="kpiEvolSupCountDetail" class="text-[10px] text-slate-400 mt-0.5 block">Comprobantes de compra</span>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Promedio por Compra</span>
+                            <h4 id="kpiEvolSupAverage" class="text-2xl font-black text-sky-600 mt-1">$ 0.00</h4>
+                            <span class="text-[10px] text-slate-400 mt-0.5 block">Ticket promedio de facturación</span>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Insumos Diferentes</span>
+                            <h4 id="kpiEvolSupUniqueItems" class="text-2xl font-black text-indigo-600 mt-1">0</h4>
+                            <span class="text-[10px] text-slate-400 mt-0.5 block">Variedad de insumos adquiridos</span>
+                        </div>
+                    </div>
+
+                    <!-- Chart Box -->
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-chart-column text-teal-600"></i>
+                                <span>Evolución Mensual de Compras ($)</span>
+                            </h4>
+                            <span class="text-xs text-slate-400" id="evolSupplierChartLabel">Facturación mensual</span>
+                        </div>
+                        <div class="relative h-64 w-full">
+                            <canvas id="supplierPurchasesChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-2">
+                        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+                            <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                                <i class="fa-solid fa-list text-slate-500"></i>
+                                <span>Detalle Cronológico de Compras</span>
+                            </h4>
+                            <span id="evolSupplierRowCount" class="text-xs font-semibold text-slate-500">0 compras</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-3 px-3">Fecha</th>
+                                        <th class="py-3 px-3">Nº Factura</th>
+                                        <th class="py-3 px-4">Proveedor</th>
+                                        <th class="py-3 px-4">Renglones / Insumos</th>
+                                        <th class="py-3 px-3 text-center">Estado Pago</th>
+                                        <th class="py-3 px-3 text-right">Subtotal Neto ($)</th>
+                                        <th class="py-3 px-3 text-right text-amber-600">Dto ($)</th>
+                                        <th class="py-3 px-4 text-right font-black text-slate-900">Total Factura ($)</th>
+                                        <th class="py-3 px-2 text-center"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="evolSupplierTableBody" class="divide-y divide-slate-200">
+                                    <!-- Dinámico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUBTAB 2: EVOLUCIÓN DE PRECIOS POR INSUMO -->
+                <div id="subtabEvolInsumo" class="space-y-6 hidden">
+                    <!-- Filters bar -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 mb-1">Seleccionar Insumo *</label>
+                                <select id="evolProductSelect" onchange="App.renderEvolucionInsumo()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                                    <!-- Insumos dinámicos -->
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 mb-1">Filtrar por Proveedor (Opcional)</label>
+                                <select id="evolProdSupplierFilter" onchange="App.renderEvolucionInsumo()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                                    <option value="">-- Todos los Proveedores --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold text-slate-600 mb-1">Rango de Fecha Desde</label>
+                                <input type="date" id="evolProdDateFrom" onchange="App.renderEvolucionInsumo()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div class="flex items-end gap-2 pt-2 lg:pt-0">
+                            <button onclick="App.exportEvolucionInsumoToCSV()" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors whitespace-nowrap">
+                                <i class="fa-solid fa-file-excel"></i>
+                                <span>Exportar Evolución (Excel)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- KPIs Insumo -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Último Costo Unitario</span>
+                            <h4 id="kpiEvolProdLastPrice" class="text-2xl font-black text-sky-700 mt-1">$ 0.00</h4>
+                            <span id="kpiEvolProdLastDate" class="text-[10px] text-slate-400 mt-0.5 block">Última compra registrada</span>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Costo Mínimo Pagado</span>
+                            <h4 id="kpiEvolProdMinPrice" class="text-2xl font-black text-emerald-600 mt-1">$ 0.00</h4>
+                            <span class="text-[10px] text-slate-400 mt-0.5 block">Mejor precio histórico</span>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Costo Máximo Pagado</span>
+                            <h4 id="kpiEvolProdMaxPrice" class="text-2xl font-black text-red-600 mt-1">$ 0.00</h4>
+                            <span class="text-[10px] text-slate-400 mt-0.5 block">Precio pico alcanzado</span>
+                        </div>
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Variación Histórica</span>
+                            <h4 id="kpiEvolProdVariation" class="text-2xl font-black text-slate-800 mt-1">0.0 %</h4>
+                            <span id="kpiEvolProdVarDetail" class="text-[10px] text-slate-400 mt-0.5 block">Desde la 1ª compra registrada</span>
+                        </div>
+                    </div>
+
+                    <!-- Line Chart of Price Evolution -->
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-arrow-trend-up text-sky-600"></i>
+                                <span>Curva de Evolución del Costo Unitario Neto ($)</span>
+                            </h4>
+                            <span class="text-xs font-semibold text-slate-500" id="evolProdChartLabel">Insumo seleccionado</span>
+                        </div>
+                        <div class="relative h-72 w-full">
+                            <canvas id="productPriceEvolutionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Table of Purchases for this Product -->
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-2">
+                        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+                            <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                                <i class="fa-solid fa-clock-rotate-left text-slate-500"></i>
+                                <span>Historial de Compras y Costos del Insumo</span>
+                            </h4>
+                            <span id="evolProdRowCount" class="text-xs font-semibold text-slate-500">0 registros</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-3 px-3">Fecha</th>
+                                        <th class="py-3 px-4">Proveedor</th>
+                                        <th class="py-3 px-3">Nº Factura</th>
+                                        <th class="py-3 px-3 text-right">Cantidad</th>
+                                        <th class="py-3 px-2 text-center">Unidad</th>
+                                        <th class="py-3 px-3 text-right">Costo Lista ($)</th>
+                                        <th class="py-3 px-3 text-right text-amber-600">Dto. (% / $)</th>
+                                        <th class="py-3 px-3 text-right font-black text-sky-700">Costo Neto Unit. ($)</th>
+                                        <th class="py-3 px-3 text-right">Subtotal ($)</th>
+                                        <th class="py-3 px-3 text-center">Variación %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="evolProdTableBody" class="divide-y divide-slate-200">
+                                    <!-- Dinámico -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- VIEW: CONFIGURACIÓN Y BACKUPS -->
             <section id="view-ajustes" class="p-6 space-y-6 hidden animate-fade-in">
                 <div class="max-w-4xl mx-auto space-y-6">
@@ -1625,6 +1856,7 @@
                         <label class="flex items-center gap-1.5"><input type="checkbox" value="cmv" class="usr-perm-check"> Control CMV</label>
                         <label class="flex items-center gap-1.5"><input type="checkbox" value="productos" class="usr-perm-check"> Insumos y Stock</label>
                         <label class="flex items-center gap-1.5"><input type="checkbox" value="compras-historial" class="usr-perm-check"> Historial y Pagos</label>
+                        <label class="flex items-center gap-1.5"><input type="checkbox" value="evolucion-compras" class="usr-perm-check"> Evolución de Compras</label>
                         <label class="flex items-center gap-1.5"><input type="checkbox" value="ajustes" class="usr-perm-check"> Configuración</label>
                     </div>
                 </div>

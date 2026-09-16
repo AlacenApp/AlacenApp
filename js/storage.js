@@ -44,7 +44,7 @@ const DEFAULT_USERS = [
         username: 'compras',
         pin: '2222',
         role: 'compras',
-        permissions: ['dashboard', 'compras-nueva', 'ordenes-compra', 'proveedores', 'productos', 'compras-historial'],
+        permissions: ['dashboard', 'compras-nueva', 'ordenes-compra', 'proveedores', 'productos', 'compras-historial', 'evolucion-compras'],
         active: true,
         avatarColor: 'bg-emerald-600'
     },
@@ -217,6 +217,9 @@ class StorageManager {
     static hasPermission(user, moduleKey) {
         if (!user) return false;
         if (user.role === 'admin' || (user.permissions && user.permissions.includes('all'))) {
+            return true;
+        }
+        if (user.role === 'compras' && moduleKey === 'evolucion-compras') {
             return true;
         }
         if (!user.permissions || !Array.isArray(user.permissions)) {
