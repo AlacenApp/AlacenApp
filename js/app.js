@@ -10,6 +10,7 @@ const App = {
     inventorySubTab: 'inicial',
     pendingProductForPurchase: false,
     activeUser: null,
+    sidebarHidden: false,
 
     init() {
         const today = new Date();
@@ -48,6 +49,10 @@ const App = {
         this.populateDropdowns();
         this.updateHeaderBusinessInfo();
 
+        // Restaurar estado del sidebar
+        this.sidebarHidden = localStorage.getItem('sidebar_hidden') === 'true';
+        this._applySidebarState(false);
+
         // Si el usuario no tiene permiso al dashboard inicial, ir a su primera vista permitida
         if (!StorageManager.hasPermission(this.activeUser, 'dashboard')) {
             const firstAllowed = this.getFirstAllowedView();
@@ -64,8 +69,30 @@ const App = {
     },
 
     // ==========================================
-    // SISTEMA DE USUARIOS Y CONTROL DE ACCESOS (RBAC)
+    // SIDEBAR COLAPSABLE
     // ==========================================
+    toggleSidebar() {
+        this.sidebarHidden = !this.sidebarHidden;
+        localStorage.setItem('sidebar_hidden', this.sidebarHidden);
+        this._applySidebarState(true);
+    },
+
+    _applySidebarState(animate) {
+        const sidebar = document.getElementById('appSidebar');
+        if (!sidebar) return;
+        if (this.sidebarHidden) {
+            sidebar.style.width = '0';
+            sidebar.style.minWidth = '0';
+            sidebar.style.padding = '0';
+            sidebar.style.overflow = 'hidden';
+        } else {
+            sidebar.style.width = '';
+            sidebar.style.minWidth = '';
+            sidebar.style.padding = '';
+            sidebar.style.overflow = '';
+        }
+    },
+
     applyUserPermissions() {
         if (!this.activeUser) {
             this.activeUser = StorageManager.getActiveUser();
@@ -376,13 +403,21 @@ const App = {
             ocSupSelect.value = currentVal;
         }
 
-        // 3. Selector de proveedores en Modal Insumo (Opcional)
+        // 3. Selector de proveedores en Modal Insumo (Habitual y Secundario)
         const prodSupSelect = document.getElementById('prodFormSupplierSelect');
         if (prodSupSelect) {
             const currentVal = prodSupSelect.value;
             prodSupSelect.innerHTML = '<option value="">-- Sin proveedor asignado --</option>' +
                 suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
             prodSupSelect.value = currentVal;
+        }
+
+        const prodSecSupSelect = document.getElementById('prodFormSecondarySupplierSelect');
+        if (prodSecSupSelect) {
+            const currentVal = prodSecSupSelect.value;
+            prodSecSupSelect.innerHTML = '<option value="">-- Sin proveedor secundario --</option>' +
+                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+            prodSecSupSelect.value = currentVal;
         }
 
         // 4. Selector de categorías en Modal Insumo
@@ -647,14 +682,52 @@ const App = {
     },
 
     handlePurchaseSupplierChange(supId) {
-        if (!supId) return;
-        const sup = StorageManager.getSupplierById(supId);
-        if (sup && sup.paymentMethods) {
-            if (sup.paymentMethods.toLowerCase().includes('corriente') || sup.paymentMethods.toLowerCase().includes('30')) {
-                document.getElementById('purchasePaymentStatus').value = 'pendiente';
-                document.getElementById('purchasePaymentMethod').value = 'Cuenta Corriente / A Pagar';
+        if (supId) {
+            const sup = StorageManager.getSupplierById(supId);
+            if (sup && sup.paymentMethods) {
+                if (sup.paymentMethods.toLowerCase().includes('corriente') || sup.paymentMethods.toLowerCase().includes('30')) {
+                    document.getElementById('purchasePaymentStatus').value = 'pendiente';
+                    document.getElementById('purchasePaymentMethod').value = 'Cuenta Corriente / A Pagar';
+                }
             }
         }
+        this.refreshPurchaseRowsProductDropdowns(supId);
+    },
+
+    refreshPurchaseRowsProductDropdowns(supId) {
+        let products = [];
+        if (supId) {
+            products = ProductManager.getProductsForSupplier(supId);
+        } else {
+            products = StorageManager.getProducts();
+        }
+
+        const rows = document.querySelectorAll('.purchase-item-row');
+        rows.forEach(row => {
+            const select = row.querySelector('.row-product-select');
+            const currentSelectedId = select.value;
+
+            let optionsHtml = '<option value="">-- Seleccionar Insumo --</option>';
+            if (supId && products.length === 0) {
+                optionsHtml = '<option value="">-- Sin insumos vinculados a este proveedor --</option>';
+            }
+
+            let found = false;
+            products.forEach(p => {
+                const isSelected = (p.id === currentSelectedId);
+                if (isSelected) found = true;
+                optionsHtml += `<option value="${p.id}" data-unit="${p.unit}" data-cost="${p.costPrice || 0}" ${isSelected ? 'selected' : ''}>${p.name} (${p.code})</option>`;
+            });
+
+            select.innerHTML = optionsHtml;
+            if (!found && currentSelectedId) {
+                select.value = '';
+                row.querySelector('.row-unit-badge').textContent = 'u.';
+                row.querySelector('.row-cost-input').value = '0';
+            }
+        });
+
+        this.calculatePurchaseTotals();
     },
 
     handlePurchasePaymentStatusChange(status) {
@@ -665,33 +738,57 @@ const App = {
         }
     },
 
-    addPurchaseRow(defaultProductId = '', defaultQty = 1, defaultCost = 0) {
+    addPurchaseRow(defaultProductId = '', defaultQty = 1, defaultCost = 0, defaultDiscountPct = 0, defaultDiscountVal = 0) {
         const tbody = document.getElementById('purchaseItemsTableBody');
-        const products = StorageManager.getProducts();
+        const supSelect = document.getElementById('purchaseSupplierSelect');
+        const selectedSupplierId = supSelect ? supSelect.value : '';
+
+        let products = [];
+        if (selectedSupplierId) {
+            products = ProductManager.getProductsForSupplier(selectedSupplierId);
+        } else {
+            products = StorageManager.getProducts();
+        }
 
         const row = document.createElement('tr');
         row.className = 'purchase-item-row';
 
         let optionsHtml = '<option value="">-- Seleccionar Insumo --</option>';
+        if (selectedSupplierId && products.length === 0) {
+            optionsHtml = '<option value="">-- Sin insumos vinculados a este proveedor --</option>';
+        }
+
         products.forEach(p => {
             const selected = (p.id === defaultProductId) ? 'selected' : '';
             optionsHtml += `<option value="${p.id}" data-unit="${p.unit}" data-cost="${p.costPrice || 0}" ${selected}>${p.name} (${p.code})</option>`;
         });
 
         row.innerHTML = `
-            <td class="py-2 px-3">
-                <select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none">
+            <td class="py-2 px-2.5">
+                <select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none">
                     ${optionsHtml}
                 </select>
             </td>
             <td class="py-2 px-2 text-center text-slate-500 font-bold row-unit-badge">
                 u.
             </td>
-            <td class="py-2 px-3">
-                <input type="number" step="any" min="0.001" required value="${defaultQty}" oninput="App.calculatePurchaseTotals()" class="row-qty-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
+            <td class="py-2 px-2">
+                <input type="number" step="any" min="0.001" required value="${defaultQty}" oninput="App.calculatePurchaseTotals(this, 'qty')" class="row-qty-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
             </td>
-            <td class="py-2 px-3">
-                <input type="number" step="any" min="0" required value="${defaultCost}" oninput="App.calculatePurchaseTotals()" class="row-cost-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
+            <td class="py-2 px-2">
+                <div class="flex items-center gap-1">
+                    <div class="relative flex-1 min-w-0" title="Descuento en porcentaje (%)">
+                        <input type="number" step="any" min="0" max="100" placeholder="0" value="${defaultDiscountPct || ''}" oninput="App.updateRowDiscountPct(this)" class="row-discount-pct w-full bg-amber-50/50 border border-amber-300 rounded-lg pl-1.5 pr-4 py-1.5 text-xs font-bold text-amber-800 text-right focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                        <span class="absolute right-1 top-1.5 text-[10px] text-amber-600 font-bold pointer-events-none">%</span>
+                    </div>
+                    <div class="relative flex-1 min-w-0" title="Descuento en monto fijo ($)">
+                        <input type="number" step="any" min="0" placeholder="0" value="${defaultDiscountVal || ''}" oninput="App.updateRowDiscountVal(this)" class="row-discount-val w-full bg-amber-50/50 border border-amber-300 rounded-lg pl-1.5 pr-4 py-1.5 text-xs font-bold text-amber-800 text-right focus:ring-2 focus:ring-amber-500 focus:outline-none">
+                        <span class="absolute right-1 top-1.5 text-[10px] text-amber-600 font-bold pointer-events-none">$</span>
+                    </div>
+                </div>
+            </td>
+            <td class="py-2 px-2">
+                <input type="number" step="any" min="0" required value="${defaultCost}" oninput="App.calculatePurchaseTotals(this, 'cost')" class="row-cost-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold focus:ring-2 focus:ring-sky-500 focus:outline-none">
             </td>
             <td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">
                 $ 0.00
@@ -743,23 +840,97 @@ const App = {
         this.calculatePurchaseTotals();
     },
 
-    calculatePurchaseTotals() {
+    updateRowDiscountPct(inputEl) {
+        const row = inputEl.closest('tr');
+        const qty = parseFloat(row.querySelector('.row-qty-input').value) || 0;
+        const cost = parseFloat(row.querySelector('.row-cost-input').value) || 0;
+        const gross = qty * cost;
+
+        const pct = parseFloat(inputEl.value) || 0;
+        const valInput = row.querySelector('.row-discount-val');
+        if (pct > 0 && gross > 0) {
+            const val = Number((gross * (pct / 100)).toFixed(2));
+            valInput.value = val;
+        } else {
+            valInput.value = '';
+        }
+        this.calculatePurchaseTotals();
+    },
+
+    updateRowDiscountVal(inputEl) {
+        const row = inputEl.closest('tr');
+        const qty = parseFloat(row.querySelector('.row-qty-input').value) || 0;
+        const cost = parseFloat(row.querySelector('.row-cost-input').value) || 0;
+        const gross = qty * cost;
+
+        const val = parseFloat(inputEl.value) || 0;
+        const pctInput = row.querySelector('.row-discount-pct');
+        if (val > 0 && gross > 0) {
+            const pct = Number(((val / gross) * 100).toFixed(2));
+            pctInput.value = pct;
+        } else {
+            pctInput.value = '';
+        }
+        this.calculatePurchaseTotals();
+    },
+
+    calculatePurchaseTotals(changedEl = null, type = '') {
         const settings = StorageManager.getSettings();
         const curr = settings.currency || '$';
         const rows = document.querySelectorAll('.purchase-item-row');
 
+        let grossSubtotal = 0;
+        let totalDiscounts = 0;
         let netSubtotal = 0;
 
         rows.forEach(row => {
             const qty = parseFloat(row.querySelector('.row-qty-input').value) || 0;
             const cost = parseFloat(row.querySelector('.row-cost-input').value) || 0;
-            const subtotal = Number((qty * cost).toFixed(2));
+            const gross = Number((qty * cost).toFixed(2));
+            grossSubtotal += gross;
+
+            const pctInput = row.querySelector('.row-discount-pct');
+            const valInput = row.querySelector('.row-discount-val');
+            
+            let discount = 0;
+            if (type === 'qty' || type === 'cost') {
+                const pct = parseFloat(pctInput?.value) || 0;
+                if (pct > 0 && gross > 0) {
+                    discount = Number((gross * (pct / 100)).toFixed(2));
+                    if (valInput) valInput.value = discount;
+                } else if (valInput && parseFloat(valInput.value) > 0) {
+                    discount = Math.min(gross, parseFloat(valInput.value) || 0);
+                }
+            } else {
+                discount = parseFloat(valInput?.value) || 0;
+                if (discount > gross) discount = gross;
+            }
+
+            totalDiscounts += discount;
+            const subtotal = Math.max(0, Number((gross - discount).toFixed(2)));
             netSubtotal += subtotal;
 
             row.querySelector('.row-subtotal').textContent = `${curr} ${subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
         });
 
         netSubtotal = Number(netSubtotal.toFixed(2));
+        grossSubtotal = Number(grossSubtotal.toFixed(2));
+        totalDiscounts = Number(totalDiscounts.toFixed(2));
+
+        const grossEl = document.getElementById('footerGrossSubtotal');
+        if (grossEl) grossEl.textContent = `${curr} ${grossSubtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+
+        const discountRow = document.getElementById('footerDiscountRow');
+        const discountAmountEl = document.getElementById('footerDiscountAmount');
+        if (discountRow && discountAmountEl) {
+            if (totalDiscounts > 0) {
+                discountRow.classList.remove('hidden');
+                discountAmountEl.textContent = `- ${curr} ${totalDiscounts.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+            } else {
+                discountRow.classList.add('hidden');
+            }
+        }
+
         document.getElementById('taxNetSubtotal').value = netSubtotal;
         document.getElementById('footerNetSubtotal').textContent = `${curr} ${netSubtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
@@ -827,6 +998,10 @@ const App = {
                 const unit = row.querySelector('.row-unit-badge').textContent.trim();
                 const quantity = parseFloat(row.querySelector('.row-qty-input').value) || 0;
                 const unitCost = parseFloat(row.querySelector('.row-cost-input').value) || 0;
+                const discountPercent = parseFloat(row.querySelector('.row-discount-pct')?.value) || 0;
+                const discountAmount = parseFloat(row.querySelector('.row-discount-val')?.value) || 0;
+                const gross = Number((quantity * unitCost).toFixed(2));
+                const subtotal = Math.max(0, Number((gross - discountAmount).toFixed(2)));
 
                 if (productId && quantity > 0) {
                     items.push({
@@ -835,7 +1010,9 @@ const App = {
                         unit,
                         quantity,
                         unitCost,
-                        subtotal: Number((quantity * unitCost).toFixed(2))
+                        discountPercent,
+                        discountAmount,
+                        subtotal
                     });
                 }
             });
@@ -2327,7 +2504,8 @@ const App = {
                     <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
                     <td class="py-2.5 px-3 text-slate-500">${p.category}</td>
                     <td class="py-2.5 px-3 text-slate-600 font-medium">
-                        ${p.supplierName ? `<span class="bg-slate-100 px-2 py-0.5 rounded text-slate-700">${p.supplierName}</span>` : '<span class="text-slate-400 italic">Sin asignar</span>'}
+                        ${p.supplierName ? `<span class="bg-slate-100 px-2 py-0.5 rounded text-slate-700 block truncate" title="Habitual: ${p.supplierName}">${p.supplierName}</span>` : '<span class="text-slate-400 italic">Sin asignar</span>'}
+                        ${p.secondarySupplierName ? `<span class="text-[10px] text-slate-500 block truncate mt-0.5" title="Secundario: ${p.secondarySupplierName}"><i class="fa-solid fa-angles-right text-[8px] text-slate-400"></i> ${p.secondarySupplierName}</span>` : ''}
                     </td>
                     <td class="py-2.5 px-2 text-center text-slate-600 font-medium">${p.unit}</td>
                     <td class="py-2.5 px-3 text-right">
@@ -2372,6 +2550,7 @@ const App = {
                 document.getElementById('prodFormName').value = p.name;
                 document.getElementById('prodFormCategorySelect').value = p.category || 'Materia Prima / Insumos';
                 document.getElementById('prodFormSupplierSelect').value = p.supplierId || '';
+                document.getElementById('prodFormSecondarySupplierSelect').value = p.secondarySupplierId || '';
                 document.getElementById('prodFormUnit').value = p.unit || 'kg';
                 document.getElementById('prodFormStock').value = p.currentStock || 0;
                 document.getElementById('prodFormMinStock').value = p.minStock || 0;
@@ -2383,6 +2562,15 @@ const App = {
             document.getElementById('prodFormId').value = '';
             document.getElementById('prodFormStock').value = '0';
             document.getElementById('prodFormMinStock').value = '10';
+            document.getElementById('prodFormSupplierSelect').value = '';
+            document.getElementById('prodFormSecondarySupplierSelect').value = '';
+
+            if (fromPurchase) {
+                const activePurchaseSupId = document.getElementById('purchaseSupplierSelect')?.value;
+                if (activePurchaseSupId) {
+                    document.getElementById('prodFormSupplierSelect').value = activePurchaseSupId;
+                }
+            }
         }
 
         document.getElementById('productModal').classList.remove('hidden');
@@ -2399,6 +2587,10 @@ const App = {
             const supplierId = supSelect.value;
             const supplierName = supplierId ? (supSelect.options[supSelect.selectedIndex]?.text || '') : '';
 
+            const secSupSelect = document.getElementById('prodFormSecondarySupplierSelect');
+            const secondarySupplierId = secSupSelect ? secSupSelect.value : '';
+            const secondarySupplierName = secondarySupplierId ? (secSupSelect.options[secSupSelect.selectedIndex]?.text || '') : '';
+
             const formData = {
                 id: document.getElementById('prodFormId').value || undefined,
                 code: document.getElementById('prodFormCode').value,
@@ -2406,6 +2598,8 @@ const App = {
                 category: document.getElementById('prodFormCategorySelect').value,
                 supplierId: supplierId,
                 supplierName: supplierName,
+                secondarySupplierId: secondarySupplierId,
+                secondarySupplierName: secondarySupplierName,
                 unit: document.getElementById('prodFormUnit').value,
                 currentStock: document.getElementById('prodFormStock').value,
                 minStock: document.getElementById('prodFormMinStock').value,
@@ -2420,6 +2614,8 @@ const App = {
             this.showToast(`Insumo "${formData.name}" guardado exitosamente.`, 'success');
 
             if (this.pendingProductForPurchase && savedItem) {
+                const activeSupId = document.getElementById('purchaseSupplierSelect')?.value || '';
+                this.refreshPurchaseRowsProductDropdowns(activeSupId);
                 this.addPurchaseRow(savedItem.id, 1, savedItem.costPrice);
                 this.pendingProductForPurchase = false;
             } else {

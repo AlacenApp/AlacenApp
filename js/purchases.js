@@ -39,15 +39,23 @@ class PurchaseManager {
         }
 
         let calculatedNet = 0;
+        let totalDiscount = 0;
         for (let item of purchaseData.items) {
             if (!item.productId) throw new Error('Todos los renglones deben tener un producto seleccionado.');
             if (isNaN(item.quantity) || item.quantity <= 0) throw new Error(`Cantidad inválida para ${item.productName}.`);
             if (isNaN(item.unitCost) || item.unitCost < 0) throw new Error(`Costo unitario inválido para ${item.productName}.`);
-            item.subtotal = Number((item.quantity * item.unitCost).toFixed(2));
+            
+            const gross = Number((item.quantity * item.unitCost).toFixed(2));
+            const discVal = Number(item.discountAmount || (item.discountPercent ? gross * (item.discountPercent / 100) : 0));
+            item.discountPercent = Number(item.discountPercent || 0);
+            item.discountAmount = Number(discVal.toFixed(2));
+            item.subtotal = Math.max(0, Number((gross - discVal).toFixed(2)));
             calculatedNet += item.subtotal;
+            totalDiscount += item.discountAmount;
         }
 
         purchaseData.netSubtotal = Number(calculatedNet.toFixed(2));
+        purchaseData.totalDiscount = Number(totalDiscount.toFixed(2));
         
         const ivaRate = Number(purchaseData.ivaRate || 0);
         const ivaAmount = (purchaseData.ivaAmount !== undefined && purchaseData.ivaAmount !== null)

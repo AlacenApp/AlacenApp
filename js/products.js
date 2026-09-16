@@ -87,6 +87,17 @@ class ProductManager {
             if (sup) supplierId = sup.id;
         }
 
+        // Proveedor Secundario
+        let secondarySupplierName = (formData.secondarySupplierName || '').trim();
+        let secondarySupplierId = formData.secondarySupplierId || '';
+        if (secondarySupplierId) {
+            const supSec = StorageManager.getSupplierById(secondarySupplierId);
+            if (supSec) secondarySupplierName = supSec.name;
+        } else if (secondarySupplierName) {
+            const supSec = StorageManager.getSupplierByName(secondarySupplierName);
+            if (supSec) secondarySupplierId = supSec.id;
+        }
+
         const product = {
             id: formData.id || undefined,
             code: (formData.code || '').trim().toUpperCase(),
@@ -99,6 +110,8 @@ class ProductManager {
             salePrice: Number(formData.salePrice || 0),
             supplierId: supplierId,
             supplierName: supplierName,
+            secondarySupplierId: secondarySupplierId,
+            secondarySupplierName: secondarySupplierName,
             notes: (formData.notes || '').trim()
         };
 
@@ -116,7 +129,7 @@ class ProductManager {
 
     /**
      * Obtiene los insumos asociados a un proveedor específico:
-     * 1. Aquellos que tienen asignado a este proveedor como habitual.
+     * 1. Aquellos que tienen asignado a este proveedor como habitual o secundario.
      * 2. Aquellos que históricamente se le hayan comprado a este proveedor.
      */
     static getProductsForSupplier(supplierIdentifier) {
@@ -128,10 +141,13 @@ class ProductManager {
         const supName = supplier ? supplier.name.toLowerCase() : supplierIdentifier.toLowerCase();
         const supId = supplier ? supplier.id : '';
 
-        // 1. Insumos asignados directamente en el catálogo
+        // 1. Insumos asignados directamente en el catálogo (habitual o secundario)
         const assignedIds = new Set();
         products.forEach(p => {
             if ((p.supplierId && p.supplierId === supId) || (p.supplierName && p.supplierName.toLowerCase() === supName)) {
+                assignedIds.add(p.id);
+            }
+            if ((p.secondarySupplierId && p.secondarySupplierId === supId) || (p.secondarySupplierName && p.secondarySupplierName.toLowerCase() === supName)) {
                 assignedIds.add(p.id);
             }
         });

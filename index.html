@@ -41,16 +41,19 @@
     <div class="flex-1 flex flex-col md:flex-row min-h-screen">
         
         <!-- SIDEBAR -->
-        <aside class="w-full md:w-64 bg-slate-900 text-white flex flex-col no-print">
+        <aside id="appSidebar" class="w-full md:w-64 bg-slate-900 text-white flex flex-col no-print transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0">
             <!-- Brand Logo -->
             <div class="p-5 border-b border-slate-800 flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-lg">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-lg flex-shrink-0">
                     <i class="fa-solid fa-boxes-stacked text-xl"></i>
                 </div>
-                <div>
+                <div class="flex-1 min-w-0">
                     <h1 class="font-bold text-base leading-tight tracking-wide">Stock & CMV</h1>
                     <span class="text-xs text-sky-400 font-medium" id="headerBusinessName">Gestión Comercial</span>
                 </div>
+                <button onclick="App.toggleSidebar()" title="Colapsar panel lateral" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0">
+                    <i class="fa-solid fa-angles-left"></i>
+                </button>
             </div>
 
             <!-- User Status Card in Sidebar -->
@@ -133,7 +136,7 @@
             <!-- Topbar Header -->
             <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between no-print sticky top-0 z-30 shadow-sm">
                 <div class="flex items-center gap-3">
-                    <button onclick="App.toggleSidebar()" class="md:hidden text-slate-500 hover:text-slate-700">
+                    <button id="sidebarToggleBtn" onclick="App.toggleSidebar()" title="Mostrar/ocultar panel lateral" class="text-slate-500 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors">
                         <i class="fa-solid fa-bars text-lg"></i>
                     </button>
                     <div>
@@ -355,12 +358,13 @@
                                 <table class="w-full text-left text-xs">
                                     <thead class="bg-slate-100 text-slate-700 uppercase font-semibold">
                                         <tr>
-                                            <th class="py-3 px-3 w-5/12">Insumo / Producto</th>
+                                            <th class="py-3 px-3 w-4/12">Insumo / Producto</th>
                                             <th class="py-3 px-2 w-1/12 text-center">Unidad</th>
-                                            <th class="py-3 px-3 w-2/12">Cantidad</th>
-                                            <th class="py-3 px-3 w-2/12">Costo Neto Unit. ($)</th>
+                                            <th class="py-3 px-2 w-2/12">Cantidad</th>
+                                            <th class="py-3 px-2 w-2/12 text-center">Descuento (% / $)</th>
+                                            <th class="py-3 px-2 w-2/12">Costo Neto Unit. ($)</th>
                                             <th class="py-3 px-3 w-2/12 text-right">Subtotal Neto ($)</th>
-                                            <th class="py-3 px-2 w-1/12 text-center"></th>
+                                            <th class="py-3 px-2 text-center"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="purchaseItemsTableBody" class="divide-y divide-slate-200 bg-white">
@@ -376,6 +380,7 @@
                         </div>
 
                         <!-- Liquidación Impositiva -->
+
                         <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4">
                             <h4 class="font-bold text-xs uppercase tracking-wider text-slate-700 flex items-center gap-2 border-b border-slate-200 pb-2">
                                 <i class="fa-solid fa-file-invoice-dollar text-emerald-600"></i>
@@ -448,7 +453,15 @@
 
                             <div class="bg-slate-900 text-white p-5 rounded-xl border border-slate-800 space-y-2 shadow-md">
                                 <div class="flex items-center justify-between text-xs text-slate-300">
-                                    <span>Subtotal Neto:</span>
+                                    <span>Subtotal Renglones:</span>
+                                    <span id="footerGrossSubtotal" class="font-bold font-mono text-slate-200">$ 0.00</span>
+                                </div>
+                                <div id="footerDiscountRow" class="flex items-center justify-between text-xs text-amber-300 hidden">
+                                    <span>Total Descuentos:</span>
+                                    <span id="footerDiscountAmount" class="font-bold font-mono text-amber-300">- $ 0.00</span>
+                                </div>
+                                <div class="flex items-center justify-between text-xs text-slate-300">
+                                    <span>Subtotal Neto Gravado:</span>
                                     <span id="footerNetSubtotal" class="font-bold font-mono">$ 0.00</span>
                                 </div>
                                 <div class="flex items-center justify-between text-xs text-slate-300">
@@ -1659,17 +1672,24 @@
                     <input type="text" id="prodFormName" required placeholder="Ej: Harina 0000 Ultra Refinada" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
                 </div>
 
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Categoría</label>
+                    <select id="prodFormCategorySelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                        <!-- Dinámico -->
+                    </select>
+                </div>
+
                 <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Categoría</label>
-                        <select id="prodFormCategorySelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
-                            <!-- Dinámico -->
-                        </select>
-                    </div>
                     <div>
                         <label class="block font-semibold text-slate-700 mb-1">Proveedor Habitual <span class="text-slate-400 font-normal">(Opcional)</span></label>
                         <select id="prodFormSupplierSelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
                             <option value="">-- Sin proveedor asignado --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Proveedor Secundario <span class="text-slate-400 font-normal">(Opcional)</span></label>
+                        <select id="prodFormSecondarySupplierSelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            <option value="">-- Sin proveedor secundario --</option>
                         </select>
                     </div>
                 </div>
