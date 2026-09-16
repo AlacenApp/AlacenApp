@@ -73,6 +73,46 @@ class PurchaseManager {
         return StorageManager.addPurchase(purchaseData);
     }
 
+    static updatePurchase(purchaseId, purchaseData) {
+        if (!purchaseData.items || purchaseData.items.length === 0) {
+            throw new Error('Debes agregar al menos un insumo o producto a la compra.');
+        }
+
+        let calculatedNet = 0;
+        let totalDiscount = 0;
+        for (let item of purchaseData.items) {
+            if (!item.productId) throw new Error('Todos los renglones deben tener un producto seleccionado.');
+            if (isNaN(item.quantity) || item.quantity <= 0) throw new Error(`Cantidad inválida para ${item.productName}.`);
+            if (isNaN(item.unitCost) || item.unitCost < 0) throw new Error(`Costo unitario inválido para ${item.productName}.`);
+            
+            const gross = Number((item.quantity * item.unitCost).toFixed(2));
+            const discVal = Number(item.discountAmount || (item.discountPercent ? gross * (item.discountPercent / 100) : 0));
+            item.discountPercent = Number(item.discountPercent || 0);
+            item.discountAmount = Number(discVal.toFixed(2));
+            item.subtotal = Math.max(0, Number((gross - discVal).toFixed(2)));
+            calculatedNet += item.subtotal;
+            totalDiscount += item.discountAmount;
+        }
+
+        purchaseData.netSubtotal = Number(calculatedNet.toFixed(2));
+        purchaseData.totalDiscount = Number(totalDiscount.toFixed(2));
+        
+        const ivaRate = Number(purchaseData.ivaRate || 0);
+        const ivaAmount = (purchaseData.ivaAmount !== undefined && purchaseData.ivaAmount !== null)
+            ? Number(purchaseData.ivaAmount)
+            : Number((calculatedNet * (ivaRate / 100)).toFixed(2));
+
+        const iibbAmount = Number(purchaseData.iibbAmount || 0);
+        const ivaPerception = Number(purchaseData.ivaPerception || 0);
+        const otherTaxes = Number(purchaseData.otherTaxes || 0);
+
+        purchaseData.ivaAmount = ivaAmount;
+        purchaseData.totalInvoice = Number((calculatedNet + ivaAmount + iibbAmount + ivaPerception + otherTaxes).toFixed(2));
+        purchaseData.totalCost = purchaseData.totalInvoice;
+
+        return StorageManager.updatePurchase(purchaseId, purchaseData);
+    }
+
     static exportPurchasesToCSV(monthFilter = '', paymentStatusFilter = 'all') {
         const purchases = this.getFilteredPurchases({ month: monthFilter, paymentStatus: paymentStatusFilter });
         const settings = StorageManager.getSettings();

@@ -491,7 +491,9 @@ const App = {
         if (viewId === 'dashboard') {
             this.renderDashboard();
         } else if (viewId === 'compras-nueva') {
-            if (params.reset || document.getElementById('purchaseItemsTableBody').children.length === 0) {
+            if (params.editPurchaseId) {
+                this.editPurchase(params.editPurchaseId);
+            } else if (params.reset || document.getElementById('purchaseItemsTableBody').children.length === 0 || document.getElementById('purchaseEditId')?.value) {
                 this.resetPurchaseForm();
             }
             if (params.prefilledOrder) {
@@ -663,6 +665,24 @@ const App = {
         const form = document.getElementById('purchaseForm');
         if (form) form.reset();
 
+        const editIdEl = document.getElementById('purchaseEditId');
+        if (editIdEl) editIdEl.value = '';
+
+        const banner = document.getElementById('purchaseEditBanner');
+        if (banner) banner.classList.add('hidden');
+
+        const titleEl = document.getElementById('purchaseFormTitle');
+        if (titleEl) titleEl.textContent = 'Carga de Factura de Compra con Impuestos';
+
+        const iconEl = document.getElementById('purchaseFormIcon');
+        if (iconEl) iconEl.className = 'fa-solid fa-cart-shopping text-emerald-400';
+
+        const submitBtnText = document.getElementById('purchaseSubmitBtnText');
+        if (submitBtnText) submitBtnText.textContent = 'Guardar Factura e Incrementar Stock';
+
+        const submitBtnIcon = document.getElementById('purchaseSubmitBtnIcon');
+        if (submitBtnIcon) submitBtnIcon.className = 'fa-solid fa-check';
+
         const today = new Date();
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -679,6 +699,94 @@ const App = {
         tbody.innerHTML = '';
         this.addPurchaseRow();
         this.calculatePurchaseTotals();
+    },
+
+    editPurchase(purchaseId) {
+        const purchase = StorageManager.getPurchases().find(p => p.id === purchaseId);
+        if (!purchase) {
+            this.showToast('No se encontró la factura a editar.', 'error');
+            return;
+        }
+
+        this.closePurchaseDetailModal();
+        this.navigate('compras-nueva');
+
+        const editIdEl = document.getElementById('purchaseEditId');
+        if (editIdEl) editIdEl.value = purchase.id;
+
+        const banner = document.getElementById('purchaseEditBanner');
+        const bannerText = document.getElementById('purchaseEditBannerText');
+        if (banner) banner.classList.remove('hidden');
+        if (bannerText) bannerText.textContent = `Modo Edición: Modificando Factura Nº ${purchase.invoiceNumber || 'S/N'} (${purchase.supplier || ''})`;
+
+        const titleEl = document.getElementById('purchaseFormTitle');
+        if (titleEl) titleEl.textContent = `Editar Factura Nº ${purchase.invoiceNumber || 'S/N'}`;
+
+        const iconEl = document.getElementById('purchaseFormIcon');
+        if (iconEl) iconEl.className = 'fa-solid fa-pen-to-square text-amber-400';
+
+        const submitBtnText = document.getElementById('purchaseSubmitBtnText');
+        if (submitBtnText) submitBtnText.textContent = 'Guardar Cambios de Factura';
+
+        const submitBtnIcon = document.getElementById('purchaseSubmitBtnIcon');
+        if (submitBtnIcon) submitBtnIcon.className = 'fa-solid fa-floppy-disk';
+
+        document.getElementById('purchaseDate').value = purchase.date || '';
+        document.getElementById('purchaseInvoice').value = purchase.invoiceNumber || '';
+        document.getElementById('purchasePaymentStatus').value = purchase.paymentStatus || 'pagada';
+        document.getElementById('purchasePaymentMethod').value = purchase.paymentMethod || 'Efectivo';
+        document.getElementById('purchaseNotes').value = purchase.notes || '';
+        document.getElementById('purchaseCostMode').value = purchase.costMode || 'net';
+
+        this.populateDropdowns();
+
+        const supSelect = document.getElementById('purchaseSupplierSelect');
+        if (purchase.supplierId) {
+            supSelect.value = purchase.supplierId;
+        } else {
+            const sup = StorageManager.getSuppliers().find(s => s.name.toLowerCase() === (purchase.supplier || '').toLowerCase());
+            if (sup) supSelect.value = sup.id;
+        }
+
+        const tbody = document.getElementById('purchaseItemsTableBody');
+        tbody.innerHTML = '';
+
+        if (purchase.items && purchase.items.length > 0) {
+            purchase.items.forEach(it => {
+                this.addPurchaseRow(
+                    it.productId,
+                    it.quantity,
+                    it.unitCost,
+                    it.discountPercent || 0,
+                    it.discountAmount || 0
+                );
+            });
+        } else {
+            this.addPurchaseRow();
+        }
+
+        document.getElementById('taxIvaRate').value = purchase.ivaRate !== undefined ? purchase.ivaRate : '21';
+        document.getElementById('taxIvaAmount').value = purchase.ivaAmount || 0;
+        document.getElementById('taxIibbRate').value = purchase.iibbRate || 0;
+        document.getElementById('taxIibbAmount').value = purchase.iibbAmount || 0;
+        document.getElementById('taxIvaPerception').value = purchase.ivaPerception || 0;
+        document.getElementById('taxOtherTaxes').value = purchase.otherTaxes || 0;
+
+        this.calculatePurchaseTotals();
+        this.showToast(`Editando factura ${purchase.invoiceNumber || ''}`, 'info');
+    },
+
+    cancelPurchaseEdit() {
+        this.resetPurchaseForm();
+        if (StorageManager.hasPermission(this.activeUser, 'compras-historial')) {
+            this.navigate('compras-historial');
+        }
+    },
+
+    editPurchaseFromDetail() {
+        if (this._currentDetailPurchaseId) {
+            this.editPurchase(this._currentDetailPurchaseId);
+        }
     },
 
     openNewPurchase() {
@@ -1060,6 +1168,18 @@ const App = {
                 totalInvoice: Number((netSubtotal + ivaAmount + iibbAmount + ivaPerception + otherTaxes).toFixed(2)),
                 items: items
             };
+
+            const editId = document.getElementById('purchaseEditId')?.value;
+            if (editId) {
+                const updated = PurchaseManager.updatePurchase(editId, purchaseData);
+                this.showToast(`¡Factura ${updated.invoiceNumber || 'S/N'} actualizada con éxito! Stock recalculado.`, 'success');
+                this.resetPurchaseForm();
+                this.populateDropdowns();
+                if (StorageManager.hasPermission(this.activeUser, 'compras-historial')) {
+                    this.navigate('compras-historial');
+                }
+                return;
+            }
 
             const saved = PurchaseManager.registerPurchase(purchaseData);
             this.showToast(`¡Factura ${saved.invoiceNumber} registrada con éxito! Total: $${saved.totalInvoice}. Stock actualizado.`, 'success');
@@ -1478,59 +1598,126 @@ const App = {
     renderSuppliersView() {
         const search = (document.getElementById('supplierSearchInput')?.value || '').toLowerCase().trim();
         let suppliers = StorageManager.getSuppliers();
+        const products = StorageManager.getProducts();
+
+        const badgeEl = document.getElementById('suppliersTotalBadge');
+        if (badgeEl) badgeEl.textContent = `${suppliers.length} ${suppliers.length === 1 ? 'proveedor' : 'proveedores'}`;
 
         if (search) {
             suppliers = suppliers.filter(s =>
                 s.name.toLowerCase().includes(search) ||
                 (s.category && s.category.toLowerCase().includes(search)) ||
-                (s.cuit && s.cuit.includes(search))
+                (s.cuit && s.cuit.includes(search)) ||
+                (s.contactPerson && s.contactPerson.toLowerCase().includes(search)) ||
+                (s.phone && s.phone.toLowerCase().includes(search)) ||
+                (s.email && s.email.toLowerCase().includes(search))
             );
         }
 
+        const tbody = document.getElementById('suppliersTableBody');
         const grid = document.getElementById('suppliersCardGrid');
-        if (!grid) return;
+        const container = tbody || grid;
+        if (!container) return;
 
         if (suppliers.length === 0) {
-            grid.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400">No se encontraron proveedores.</div>';
+            container.innerHTML = `<tr><td colspan="8" class="py-12 text-center text-slate-400">No se encontraron proveedores${search ? ' que coincidan con la búsqueda' : ''}.</td></tr>`;
             return;
         }
 
-        grid.innerHTML = suppliers.map(s => `
-            <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
-                <div class="space-y-2">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <h4 class="font-bold text-sm text-slate-800">${s.name}</h4>
-                            <span class="text-[11px] text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-semibold border border-teal-200">${s.category || 'General'}</span>
+        container.innerHTML = suppliers.map(s => {
+            const linkedCount = products.filter(p => p.supplierId === s.id || p.secondarySupplierId === s.id || (p.supplier && p.supplier.toLowerCase() === s.name.toLowerCase())).length;
+
+            const phoneHtml = s.phone
+                ? `<a href="tel:${s.phone}" class="hover:text-teal-600 font-mono text-slate-700 whitespace-nowrap flex items-center gap-1.5"><i class="fa-solid fa-phone text-slate-400 text-[10px]"></i> ${s.phone}</a>`
+                : '<span class="text-slate-300">-</span>';
+
+            const emailHtml = s.email
+                ? `<a href="mailto:${s.email}" class="hover:text-teal-600 text-slate-700 truncate max-w-[170px] inline-flex items-center gap-1.5" title="${s.email}"><i class="fa-solid fa-envelope text-slate-400 text-[10px]"></i> ${s.email}</a>`
+                : '<span class="text-slate-300">-</span>';
+
+            const contactHtml = s.contactPerson || s.address
+                ? `<div>
+                    ${s.contactPerson ? `<div class="font-medium text-slate-800 flex items-center gap-1"><i class="fa-solid fa-user text-slate-400 text-[10px]"></i> ${s.contactPerson}</div>` : ''}
+                    ${s.address ? `<div class="text-[11px] text-slate-400 flex items-center gap-1 truncate max-w-[200px]" title="${s.address}"><i class="fa-solid fa-location-dot text-slate-300 text-[10px]"></i> ${s.address}</div>` : ''}
+                   </div>`
+                : '<span class="text-slate-300">-</span>';
+
+            const paymentHtml = s.paymentMethods
+                ? `<span class="inline-flex items-center gap-1 text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]"><i class="fa-solid fa-wallet text-slate-400 text-[10px]"></i> ${s.paymentMethods}</span>`
+                : '<span class="text-slate-400 text-[11px]">A convenir</span>';
+
+            return `
+                <tr class="table-row-hover text-xs">
+                    <td class="py-3 px-4">
+                        <div class="font-bold text-slate-900 text-sm">${s.name}</div>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">${s.category || 'General'}</span>
+                            ${s.notes ? `<span class="text-[10px] text-slate-400 italic truncate max-w-[220px]" title="${s.notes}"><i class="fa-regular fa-comment-dots text-slate-300"></i> ${s.notes}</span>` : ''}
                         </div>
-                        <span class="text-[11px] font-mono text-slate-400">${s.cuit || ''}</span>
-                    </div>
-
-                    <div class="pt-2 text-xs text-slate-600 space-y-1">
-                        ${s.phone ? `<div><i class="fa-solid fa-phone text-slate-400 w-4"></i> ${s.phone}</div>` : ''}
-                        ${s.email ? `<div><i class="fa-solid fa-envelope text-slate-400 w-4"></i> ${s.email}</div>` : ''}
-                        ${s.contactPerson ? `<div><i class="fa-solid fa-user text-slate-400 w-4"></i> Contacto: ${s.contactPerson}</div>` : ''}
-                        <div><i class="fa-solid fa-wallet text-slate-400 w-4"></i> <strong>Pago:</strong> ${s.paymentMethods || 'A convenir'}</div>
-                        ${s.notes ? `<div class="text-[11px] text-slate-400 italic mt-1 border-t border-slate-100 pt-1">${s.notes}</div>` : ''}
-                    </div>
-                </div>
-
-                <div class="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-                    ${StorageManager.hasPermission(this.activeUser, 'ordenes-compra') ? `
-                        <button onclick="App.navigate('ordenes-compra', { supplierId: '${s.id}' })" class="flex-1 py-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1">
-                            <i class="fa-solid fa-file-invoice"></i>
-                            <span>Generar OC</span>
+                    </td>
+                    <td class="py-3 px-3 font-mono font-medium text-slate-700">
+                        ${s.cuit || '<span class="text-slate-300">-</span>'}
+                    </td>
+                    <td class="py-3 px-3">
+                        ${contactHtml}
+                    </td>
+                    <td class="py-3 px-3">
+                        ${phoneHtml}
+                    </td>
+                    <td class="py-3 px-3">
+                        ${emailHtml}
+                    </td>
+                    <td class="py-3 px-3">
+                        ${paymentHtml}
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${linkedCount > 0 ? 'bg-sky-100 text-sky-800 border border-sky-200' : 'bg-slate-100 text-slate-400'}" title="${linkedCount} insumos vinculados">
+                            ${linkedCount}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
+                        ${StorageManager.hasPermission(this.activeUser, 'ordenes-compra') ? `
+                            <button onclick="App.navigate('ordenes-compra', { supplierId: '${s.id}' })" class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded text-xs font-bold transition-colors inline-flex items-center gap-1" title="Generar Orden de Compra">
+                                <i class="fa-solid fa-file-invoice"></i>
+                                <span class="hidden xl:inline"> OC</span>
+                            </button>
+                        ` : ''}
+                        <button onclick="App.navigate('evolucion-compras', { supplierId: '${s.id}' })" class="p-1.5 text-slate-500 hover:text-sky-600 rounded transition-colors" title="Ver Historial y Evolución de Compras">
+                            <i class="fa-solid fa-chart-line"></i>
                         </button>
-                    ` : ''}
-                    <button onclick="App.openSupplierModal('${s.id}')" class="p-1.5 text-slate-500 hover:text-sky-600 rounded" title="Editar proveedor">
-                        <i class="fa-solid fa-pen-to-square"></i>
-                    </button>
-                    <button onclick="App.deleteSupplier('${s.id}')" class="p-1.5 text-slate-400 hover:text-red-600 rounded" title="Eliminar proveedor">
-                        <i class="fa-solid fa-trash-can"></i>
-                    </button>
-                </div>
-            </div>
-        `).join('');
+                        <button onclick="App.openSupplierModal('${s.id}')" class="p-1.5 text-slate-500 hover:text-teal-600 rounded transition-colors" title="Editar proveedor">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
+                        <button onclick="App.deleteSupplier('${s.id}')" class="p-1.5 text-slate-400 hover:text-red-600 rounded transition-colors" title="Eliminar proveedor">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    exportSuppliersToCSV() {
+        const suppliers = StorageManager.getSuppliers();
+        const settings = StorageManager.getSettings();
+        const products = StorageManager.getProducts();
+
+        let csv = `DIRECTORIO DE PROVEEDORES - ${settings.businessName}\r\n`;
+        csv += `Generado el: ${new Date().toLocaleDateString()}\r\n\r\n`;
+        csv += 'Nombre;Rubro;CUIT;Contacto;Telefono;Email;Direccion;CondicionPago;InsumosAsociados;Observaciones\r\n';
+
+        suppliers.forEach(s => {
+            const linkedCount = products.filter(p => p.supplierId === s.id || p.secondarySupplierId === s.id || (p.supplier && p.supplier.toLowerCase() === s.name.toLowerCase())).length;
+            csv += `"${s.name || ''}";"${s.category || ''}";"${s.cuit || ''}";"${s.contactPerson || ''}";"${s.phone || ''}";"${s.email || ''}";"${s.address || ''}";"${s.paymentMethods || ''}";"${linkedCount}";"${(s.notes || '').replace(/"/g, '""')}"\r\n`;
+        });
+
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Directorio_Proveedores_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
     },
 
     openSupplierModal(supplierId = null) {
@@ -2745,6 +2932,9 @@ const App = {
                         <button onclick="App.openPaymentModal('${p.id}')" class="p-1.5 text-slate-500 hover:text-emerald-600 rounded" title="Editar estado de pago / Cancelar deuda">
                             <i class="fa-solid fa-money-bill-transfer"></i>
                         </button>
+                        <button onclick="App.editPurchase('${p.id}')" class="p-1.5 text-slate-500 hover:text-amber-600 rounded" title="Editar factura completa">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
                         <button onclick="App.viewPurchaseDetail('${p.id}')" class="p-1.5 text-slate-500 hover:text-sky-600 rounded" title="Ver liquidación impositiva">
                             <i class="fa-solid fa-eye"></i>
                         </button>
@@ -2758,6 +2948,7 @@ const App = {
     },
 
     viewPurchaseDetail(purchaseId) {
+        this._currentDetailPurchaseId = purchaseId;
         const purchase = StorageManager.getPurchases().find(p => p.id === purchaseId);
         if (!purchase) return;
 

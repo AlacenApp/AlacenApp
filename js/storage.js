@@ -490,6 +490,91 @@ class StorageManager {
         return newPurchase;
     }
 
+    static updatePurchase(id, purchaseData) {
+        let purchases = this.getPurchases();
+        const index = purchases.findIndex(p => p.id === id);
+        if (index === -1) throw new Error('Factura no encontrada para actualizar.');
+
+        const oldPurchase = purchases[index];
+        const products = this.getProducts();
+
+        // 1. Revertir el stock de los renglones anteriores
+        if (oldPurchase.items && Array.isArray(oldPurchase.items)) {
+            oldPurchase.items.forEach(oldItem => {
+                const prod = products.find(p => p.id === oldItem.productId);
+                if (prod) {
+                    prod.currentStock = Number(((prod.currentStock || 0) - Number(oldItem.quantity)).toFixed(3));
+                }
+            });
+        }
+
+        const netSubtotal = Number(purchaseData.netSubtotal || 0);
+        const ivaRate = Number(purchaseData.ivaRate || 0);
+        const ivaAmount = Number(purchaseData.ivaAmount || 0);
+        const iibbRate = Number(purchaseData.iibbRate || 0);
+        const iibbAmount = Number(purchaseData.iibbAmount || 0);
+        const ivaPerception = Number(purchaseData.ivaPerception || 0);
+        const otherTaxes = Number(purchaseData.otherTaxes || 0);
+        const totalInvoice = Number(purchaseData.totalInvoice || (netSubtotal + ivaAmount + iibbAmount + ivaPerception + otherTaxes));
+        const costMode = purchaseData.costMode || 'net';
+
+        const paymentStatus = purchaseData.paymentStatus || 'pagada';
+        const paymentDate = paymentStatus === 'pagada' ? (purchaseData.paymentDate || purchaseData.date) : '';
+        const paymentMethod = purchaseData.paymentMethod || 'Efectivo';
+
+        const updatedPurchase = {
+            ...oldPurchase,
+            date: purchaseData.date || oldPurchase.date,
+            invoiceNumber: purchaseData.invoiceNumber || 'S/N',
+            supplier: purchaseData.supplier || oldPurchase.supplier,
+            supplierId: purchaseData.supplierId || oldPurchase.supplierId,
+            paymentMethod: paymentMethod,
+            paymentStatus: paymentStatus,
+            paymentDate: paymentDate,
+            notes: purchaseData.notes !== undefined ? purchaseData.notes : oldPurchase.notes,
+            items: purchaseData.items || [],
+
+            netSubtotal: Number(netSubtotal.toFixed(2)),
+            ivaRate: ivaRate,
+            ivaAmount: Number(ivaAmount.toFixed(2)),
+            iibbRate: iibbRate,
+            iibbAmount: Number(iibbAmount.toFixed(2)),
+            ivaPerception: Number(ivaPerception.toFixed(2)),
+            otherTaxes: Number(otherTaxes.toFixed(2)),
+            totalCost: Number(totalInvoice.toFixed(2)),
+            totalInvoice: Number(totalInvoice.toFixed(2)),
+            costMode: costMode,
+
+            updatedAt: new Date().toISOString()
+        };
+
+        purchases[index] = updatedPurchase;
+        this.savePurchases(purchases);
+
+        // 2. Aplicar el stock y precios de los nuevos renglones
+        const taxMultiplier = (costMode === 'gross' && netSubtotal > 0) ? (totalInvoice / netSubtotal) : 1;
+        updatedPurchase.items.forEach(item => {
+            const prod = products.find(p => p.id === item.productId);
+            if (prod) {
+                prod.currentStock = Number(((prod.currentStock || 0) + Number(item.quantity)).toFixed(3));
+                if (purchaseData.updateCostPrices && item.unitCost > 0) {
+                    prod.costPrice = Number((item.unitCost * taxMultiplier).toFixed(2));
+                }
+                if (!prod.supplierName && updatedPurchase.supplier) {
+                    prod.supplierName = updatedPurchase.supplier;
+                }
+                prod.updatedAt = new Date().toISOString();
+            }
+        });
+        this.saveProducts(products);
+
+        if (updatedPurchase.supplier && updatedPurchase.supplier.trim()) {
+            this.addSupplierIfNotExists(updatedPurchase.supplier.trim());
+        }
+
+        return updatedPurchase;
+    }
+
     static updatePurchasePayment(id, { paymentStatus, paymentDate, paymentMethod, notes }) {
         let purchases = this.getPurchases();
         const purchase = purchases.find(p => p.id === id);
