@@ -1951,18 +1951,49 @@
                     </select>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Proveedor Habitual <span class="text-slate-400 font-normal">(Opcional)</span></label>
-                        <select id="prodFormSupplierSelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
-                            <option value="">-- Sin proveedor asignado --</option>
+                        <label class="block font-semibold text-slate-700 mb-1 text-xs">
+                            <i class="fa-solid fa-star text-amber-500 mr-1"></i>
+                            <span>Proveedor Habitual (Principal)</span>
+                        </label>
+                        <select id="prodFormSupplierSelect" onchange="App.handleProductHabitualSupplierChange(this.value)" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            <option value="">-- Sin proveedor habitual asignado --</option>
                         </select>
+                        <p class="text-[10px] text-slate-400 mt-1">Proveedor principal de compra de este insumo.</p>
                     </div>
-                    <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Proveedor Secundario <span class="text-slate-400 font-normal">(Opcional)</span></label>
-                        <select id="prodFormSecondarySupplierSelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
-                            <option value="">-- Sin proveedor secundario --</option>
-                        </select>
+                    <div class="relative">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block font-semibold text-slate-700 text-xs">
+                                <i class="fa-solid fa-truck-ramp-box text-teal-600 mr-1"></i>
+                                <span>Proveedores Secundarios (Alternativos)</span>
+                            </label>
+                            <span id="prodFormSecondaryCountBadge" class="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full hidden">0 seleccionados</span>
+                        </div>
+                        
+                        <!-- Multi-select Dropdown Button -->
+                        <div class="relative" id="secSuppliersDropdownContainer">
+                            <button type="button" onclick="App.toggleSecondarySuppliersDropdown()" id="secSuppliersDropdownBtn" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-left flex items-center justify-between focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                                <span id="secSuppliersBtnLabel" class="text-slate-500 truncate">Seleccionar proveedores secundarios...</span>
+                                <i class="fa-solid fa-chevron-down text-slate-400 text-[10px] transition-transform duration-200" id="secSuppliersChevron"></i>
+                            </button>
+
+                            <!-- Dropdown Menu with Checkboxes -->
+                            <div id="secSuppliersMenu" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5 z-50 max-h-48 overflow-y-auto space-y-1">
+                                <div class="text-[11px] text-slate-400 px-1 pb-1 border-b border-slate-100 mb-1 flex items-center justify-between">
+                                    <span>Marca los proveedores alternativos:</span>
+                                    <button type="button" onclick="App.clearSecondarySuppliers()" class="text-teal-600 hover:text-teal-800 font-bold text-[10px]">Limpiar</button>
+                                </div>
+                                <div id="secSuppliersCheckList" class="space-y-1">
+                                    <!-- Checkboxes generados dinámicamente -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Selected Chips / Badges Container -->
+                        <div id="secSuppliersSelectedChips" class="flex flex-wrap gap-1.5 mt-1.5 min-h-[22px]">
+                            <!-- Chips interactivos con botón eliminar '×' -->
+                        </div>
                     </div>
                 </div>
 

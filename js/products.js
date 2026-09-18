@@ -87,15 +87,30 @@ class ProductManager {
             if (sup) supplierId = sup.id;
         }
 
-        // Proveedor Secundario
-        let secondarySupplierName = (formData.secondarySupplierName || '').trim();
-        let secondarySupplierId = formData.secondarySupplierId || '';
-        if (secondarySupplierId) {
-            const supSec = StorageManager.getSupplierById(secondarySupplierId);
-            if (supSec) secondarySupplierName = supSec.name;
-        } else if (secondarySupplierName) {
-            const supSec = StorageManager.getSupplierByName(secondarySupplierName);
-            if (supSec) secondarySupplierId = supSec.id;
+        // Proveedor Secundario - soporta array (nuevo) y string legacy
+        let secondarySupplierIds = [];
+        let secondarySupplierNames = [];
+
+        if (Array.isArray(formData.secondarySupplierIds) && formData.secondarySupplierIds.length > 0) {
+            // Nuevo formato: array de IDs
+            secondarySupplierIds = formData.secondarySupplierIds.filter(Boolean);
+            secondarySupplierNames = secondarySupplierIds.map(id => {
+                const s = StorageManager.getSupplierById(id);
+                return s ? s.name : '';
+            }).filter(Boolean);
+            if (formData.secondarySupplierNames && formData.secondarySupplierNames.length > 0) {
+                secondarySupplierNames = formData.secondarySupplierNames.filter(Boolean);
+            }
+        } else if (formData.secondarySupplierId) {
+            // Retrocompat: formato legacy string
+            let secId = formData.secondarySupplierId;
+            let secName = (formData.secondarySupplierName || '').trim();
+            if (secId) {
+                const supSec = StorageManager.getSupplierById(secId);
+                if (supSec) secName = supSec.name;
+                secondarySupplierIds = [secId];
+                secondarySupplierNames = [secName];
+            }
         }
 
         const product = {
@@ -110,8 +125,11 @@ class ProductManager {
             salePrice: Number(formData.salePrice || 0),
             supplierId: supplierId,
             supplierName: supplierName,
-            secondarySupplierId: secondarySupplierId,
-            secondarySupplierName: secondarySupplierName,
+            secondarySupplierIds: secondarySupplierIds,
+            secondarySupplierNames: secondarySupplierNames,
+            // Retrocompat: mantener campos legacy para importaciones antiguas
+            secondarySupplierId: secondarySupplierIds[0] || '',
+            secondarySupplierName: secondarySupplierNames[0] || '',
             notes: (formData.notes || '').trim()
         };
 
@@ -147,7 +165,15 @@ class ProductManager {
             if ((p.supplierId && p.supplierId === supId) || (p.supplierName && p.supplierName.toLowerCase() === supName)) {
                 assignedIds.add(p.id);
             }
-            if ((p.secondarySupplierId && p.secondarySupplierId === supId) || (p.secondarySupplierName && p.secondarySupplierName.toLowerCase() === supName)) {
+            // Multi-select: array de IDs
+            if (Array.isArray(p.secondarySupplierIds) && p.secondarySupplierIds.includes(supId)) {
+                assignedIds.add(p.id);
+            }
+            // Retrocompat: campo legacy string
+            if (p.secondarySupplierId && p.secondarySupplierId === supId) {
+                assignedIds.add(p.id);
+            }
+            if (p.secondarySupplierName && p.secondarySupplierName.toLowerCase() === supName) {
                 assignedIds.add(p.id);
             }
         });

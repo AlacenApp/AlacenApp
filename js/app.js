@@ -14,6 +14,7 @@ const App = {
     pendingProductForPurchase: false,
     activeUser: null,
     sidebarHidden: false,
+    _selectedSecondarySupplierIds: [],
 
     init() {
         const today = new Date();
@@ -55,6 +56,17 @@ const App = {
         // Restaurar estado del sidebar
         this.sidebarHidden = localStorage.getItem('sidebar_hidden') === 'true';
         this._applySidebarState(false);
+
+        // Cerrar dropdown de proveedores secundarios al hacer click fuera
+        document.addEventListener('click', (e) => {
+            const container = document.getElementById('secSuppliersDropdownContainer');
+            const menu = document.getElementById('secSuppliersMenu');
+            if (container && menu && !container.contains(e.target)) {
+                menu.classList.add('hidden');
+                const chevron = document.getElementById('secSuppliersChevron');
+                if (chevron) chevron.classList.remove('rotate-180');
+            }
+        });
 
         // Si el usuario no tiene permiso al dashboard inicial, ir a su primera vista permitida
         if (!StorageManager.hasPermission(this.activeUser, 'dashboard')) {
@@ -422,6 +434,9 @@ const App = {
                 suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
             prodSecSupSelect.value = currentVal;
         }
+
+        // Multi-select secundarios (nuevo)
+        this.renderSecondarySuppliersChecklist();
 
         // 4. Selector de categorías en Modal Insumo
         const prodCatSelect = document.getElementById('prodFormCategorySelect');
@@ -1625,7 +1640,15 @@ const App = {
         }
 
         container.innerHTML = suppliers.map(s => {
-            const linkedCount = products.filter(p => p.supplierId === s.id || p.secondarySupplierId === s.id || (p.supplier && p.supplier.toLowerCase() === s.name.toLowerCase())).length;
+            const linkedCount = products.filter(p => {
+                if (p.supplierId === s.id) return true;
+                if (p.supplier && p.supplier.toLowerCase() === s.name.toLowerCase()) return true;
+                // Multi-select: array de secundarios
+                if (Array.isArray(p.secondarySupplierIds) && p.secondarySupplierIds.includes(s.id)) return true;
+                // Retrocompat: string legacy
+                if (p.secondarySupplierId === s.id) return true;
+                return false;
+            }).length;
 
             const phoneHtml = s.phone
                 ? `<a href="tel:${s.phone}" class="hover:text-teal-600 font-mono text-slate-700 whitespace-nowrap flex items-center gap-1.5"><i class="fa-solid fa-phone text-slate-400 text-[10px]"></i> ${s.phone}</a>`
@@ -2696,7 +2719,12 @@ const App = {
                     <td class="py-2.5 px-3 text-slate-500">${p.category}</td>
                     <td class="py-2.5 px-3 text-slate-600 font-medium">
                         ${p.supplierName ? `<span class="bg-slate-100 px-2 py-0.5 rounded text-slate-700 block truncate" title="Habitual: ${p.supplierName}">${p.supplierName}</span>` : '<span class="text-slate-400 italic">Sin asignar</span>'}
-                        ${p.secondarySupplierName ? `<span class="text-[10px] text-slate-500 block truncate mt-0.5" title="Secundario: ${p.secondarySupplierName}"><i class="fa-solid fa-angles-right text-[8px] text-slate-400"></i> ${p.secondarySupplierName}</span>` : ''}
+                        ${(() => {
+                            const secNames = Array.isArray(p.secondarySupplierNames) && p.secondarySupplierNames.length > 0
+                                ? p.secondarySupplierNames
+                                : (p.secondarySupplierName ? [p.secondarySupplierName] : []);
+                            return secNames.map(n => `<span class="text-[10px] text-slate-500 block truncate mt-0.5" title="Secundario: ${n}"><i class="fa-solid fa-angles-right text-[8px] text-slate-400"></i> ${n}</span>`).join('');
+                        })()}
                     </td>
                     <td class="py-2.5 px-2 text-center text-slate-600 font-medium">${p.unit}</td>
                     <td class="py-2.5 px-3 text-right">
@@ -2725,6 +2753,114 @@ const App = {
         }).join('');
     },
 
+    // ==========================================
+    // MULTI-SELECT PROVEEDORES SECUNDARIOS
+    // ==========================================
+
+    /** Abre/cierra el menú desplegable de secundarios */
+    toggleSecondarySuppliersDropdown() {
+        const menu = document.getElementById('secSuppliersMenu');
+        const chevron = document.getElementById('secSuppliersChevron');
+        if (!menu) return;
+        const isHidden = menu.classList.toggle('hidden');
+        if (chevron) chevron.classList.toggle('rotate-180', !isHidden);
+    },
+
+    /** Renderiza los checkboxes en el menú, excluyendo al proveedor habitual */
+    renderSecondarySuppliersChecklist(excludeId = '') {
+        const list = document.getElementById('secSuppliersCheckList');
+        if (!list) return;
+        const suppliers = StorageManager.getSuppliers();
+        const available = suppliers.filter(s => s.id !== excludeId);
+
+        if (available.length === 0) {
+            list.innerHTML = '<p class="text-[11px] text-slate-400 px-1 py-2">No hay proveedores disponibles.</p>';
+            return;
+        }
+
+        list.innerHTML = available.map(s => {
+            const checked = this._selectedSecondarySupplierIds.includes(s.id) ? 'checked' : '';
+            return `<label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-teal-50 cursor-pointer text-xs text-slate-700">
+                <input type="checkbox" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    value="${s.id}" ${checked}
+                    onchange="App.toggleSecondarySupplier('${s.id}', this.checked)">
+                <span>${s.name}</span>
+            </label>`;
+        }).join('');
+    },
+
+    /** Agrega o quita un proveedor del array de seleccionados */
+    toggleSecondarySupplier(supId, checked) {
+        if (checked) {
+            if (!this._selectedSecondarySupplierIds.includes(supId)) {
+                this._selectedSecondarySupplierIds.push(supId);
+            }
+        } else {
+            this._selectedSecondarySupplierIds = this._selectedSecondarySupplierIds.filter(id => id !== supId);
+        }
+        this.renderSecondarySupplierChips();
+    },
+
+    /** Elimina un proveedor secundario (desde el chip) */
+    removeSecondarySupplier(supId) {
+        this._selectedSecondarySupplierIds = this._selectedSecondarySupplierIds.filter(id => id !== supId);
+        this.renderSecondarySupplierChips();
+        this.renderSecondarySuppliersChecklist(document.getElementById('prodFormSupplierSelect')?.value || '');
+    },
+
+    /** Limpia todos los proveedores secundarios seleccionados */
+    clearSecondarySuppliers() {
+        this._selectedSecondarySupplierIds = [];
+        this.renderSecondarySupplierChips();
+        this.renderSecondarySuppliersChecklist(document.getElementById('prodFormSupplierSelect')?.value || '');
+    },
+
+    /** Renderiza los chips/badges de seleccionados y actualiza el botón y badge contador */
+    renderSecondarySupplierChips() {
+        const chipsContainer = document.getElementById('secSuppliersSelectedChips');
+        const btnLabel = document.getElementById('secSuppliersBtnLabel');
+        const countBadge = document.getElementById('prodFormSecondaryCountBadge');
+        if (!chipsContainer) return;
+
+        const count = this._selectedSecondarySupplierIds.length;
+        const suppliers = StorageManager.getSuppliers();
+
+        // Chips
+        chipsContainer.innerHTML = this._selectedSecondarySupplierIds.map(id => {
+            const sup = suppliers.find(s => s.id === id);
+            if (!sup) return '';
+            return `<span class="inline-flex items-center gap-1 bg-teal-100 text-teal-800 text-[11px] font-semibold px-2 py-0.5 rounded-full">
+                ${sup.name}
+                <button type="button" onclick="App.removeSecondarySupplier('${id}')" class="text-teal-600 hover:text-teal-900 font-bold leading-none">&times;</button>
+            </span>`;
+        }).join('');
+
+        // Botón label
+        if (btnLabel) {
+            btnLabel.textContent = count === 0 ? 'Seleccionar proveedores secundarios...' : `${count} proveedor${count > 1 ? 'es' : ''} seleccionado${count > 1 ? 's' : ''}`;
+        }
+
+        // Badge contador
+        if (countBadge) {
+            if (count > 0) {
+                countBadge.textContent = `${count} seleccionado${count > 1 ? 's' : ''}`;
+                countBadge.classList.remove('hidden');
+            } else {
+                countBadge.classList.add('hidden');
+            }
+        }
+    },
+
+    /** Llamado cuando cambia el proveedor habitual: re-renderiza lista excluyéndolo */
+    handleProductHabitualSupplierChange(supId) {
+        // Si el habitual estaba en secundarios, lo quitamos
+        if (supId && this._selectedSecondarySupplierIds.includes(supId)) {
+            this._selectedSecondarySupplierIds = this._selectedSecondarySupplierIds.filter(id => id !== supId);
+            this.renderSecondarySupplierChips();
+        }
+        this.renderSecondarySuppliersChecklist(supId);
+    },
+
     openProductModal(productId = null, fromPurchase = false) {
         this.pendingProductForPurchase = fromPurchase;
         const form = document.getElementById('productForm');
@@ -2741,12 +2877,20 @@ const App = {
                 document.getElementById('prodFormName').value = p.name;
                 document.getElementById('prodFormCategorySelect').value = p.category || 'Materia Prima / Insumos';
                 document.getElementById('prodFormSupplierSelect').value = p.supplierId || '';
-                document.getElementById('prodFormSecondarySupplierSelect').value = p.secondarySupplierId || '';
                 document.getElementById('prodFormUnit').value = p.unit || 'kg';
                 document.getElementById('prodFormStock').value = p.currentStock || 0;
                 document.getElementById('prodFormMinStock').value = p.minStock || 0;
                 document.getElementById('prodFormCost').value = p.costPrice || 0;
                 document.getElementById('prodFormSale').value = p.salePrice || 0;
+
+                // Cargar proveedores secundarios (retrocompat: puede ser array o string legacy)
+                if (Array.isArray(p.secondarySupplierIds) && p.secondarySupplierIds.length > 0) {
+                    this._selectedSecondarySupplierIds = [...p.secondarySupplierIds];
+                } else if (p.secondarySupplierId) {
+                    this._selectedSecondarySupplierIds = [p.secondarySupplierId];
+                } else {
+                    this._selectedSecondarySupplierIds = [];
+                }
             }
         } else {
             document.getElementById('productModalTitle').textContent = 'Nuevo Insumo / Mercadería';
@@ -2754,7 +2898,7 @@ const App = {
             document.getElementById('prodFormStock').value = '0';
             document.getElementById('prodFormMinStock').value = '10';
             document.getElementById('prodFormSupplierSelect').value = '';
-            document.getElementById('prodFormSecondarySupplierSelect').value = '';
+            this._selectedSecondarySupplierIds = [];
 
             if (fromPurchase) {
                 const activePurchaseSupId = document.getElementById('purchaseSupplierSelect')?.value;
@@ -2763,6 +2907,11 @@ const App = {
                 }
             }
         }
+
+        // Renderizar chips y checklist con el habitual actual excluido
+        const currentHabitualId = document.getElementById('prodFormSupplierSelect')?.value || '';
+        this.renderSecondarySuppliersChecklist(currentHabitualId);
+        this.renderSecondarySupplierChips();
 
         document.getElementById('productModal').classList.remove('hidden');
     },
@@ -2778,9 +2927,13 @@ const App = {
             const supplierId = supSelect.value;
             const supplierName = supplierId ? (supSelect.options[supSelect.selectedIndex]?.text || '') : '';
 
-            const secSupSelect = document.getElementById('prodFormSecondarySupplierSelect');
-            const secondarySupplierId = secSupSelect ? secSupSelect.value : '';
-            const secondarySupplierName = secondarySupplierId ? (secSupSelect.options[secSupSelect.selectedIndex]?.text || '') : '';
+            // Multi-select secundarios: usar el array en memoria
+            const allSuppliers = StorageManager.getSuppliers();
+            const secondarySupplierIds = [...this._selectedSecondarySupplierIds];
+            const secondarySupplierNames = secondarySupplierIds.map(id => {
+                const s = allSuppliers.find(x => x.id === id);
+                return s ? s.name : '';
+            }).filter(Boolean);
 
             const formData = {
                 id: document.getElementById('prodFormId').value || undefined,
@@ -2789,8 +2942,8 @@ const App = {
                 category: document.getElementById('prodFormCategorySelect').value,
                 supplierId: supplierId,
                 supplierName: supplierName,
-                secondarySupplierId: secondarySupplierId,
-                secondarySupplierName: secondarySupplierName,
+                secondarySupplierIds: secondarySupplierIds,
+                secondarySupplierNames: secondarySupplierNames,
                 unit: document.getElementById('prodFormUnit').value,
                 currentStock: document.getElementById('prodFormStock').value,
                 minStock: document.getElementById('prodFormMinStock').value,
