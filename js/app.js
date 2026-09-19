@@ -111,6 +111,21 @@ const App = {
         }
     },
 
+    toggleProveedoresNavMenu(forceState = null) {
+        const submenu = document.getElementById('nav-proveedores-submenu');
+        const chevron = document.getElementById('nav-proveedores-chevron');
+        if (!submenu) return;
+        
+        const willOpen = forceState !== null ? forceState : submenu.classList.contains('hidden');
+        if (willOpen) {
+            submenu.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+        } else {
+            submenu.classList.add('hidden');
+            if (chevron) chevron.classList.remove('rotate-180');
+        }
+    },
+
     applyUserPermissions() {
         if (!this.activeUser) {
             this.activeUser = StorageManager.getActiveUser();
@@ -152,10 +167,23 @@ const App = {
                 btn.classList.add('hidden');
             }
         });
+
+        // 4. Control de visibilidad del grupo Proveedores
+        const provGroup = document.getElementById('nav-proveedores-group');
+        if (provGroup) {
+            const hasAnyProvPerm = StorageManager.hasPermission(user, 'ordenes-compra') ||
+                                   StorageManager.hasPermission(user, 'proveedores') ||
+                                   StorageManager.hasPermission(user, 'compras-historial');
+            if (hasAnyProvPerm) {
+                provGroup.classList.remove('hidden');
+            } else {
+                provGroup.classList.add('hidden');
+            }
+        }
     },
 
     getFirstAllowedView() {
-        const order = ['dashboard', 'inventarios', 'productos', 'compras-nueva', 'ordenes-compra', 'proveedores', 'cmv', 'compras-historial', 'evolucion-compras', 'ajustes'];
+        const order = ['dashboard', 'compras-nueva', 'proveedores', 'ordenes-compra', 'compras-historial', 'productos', 'inventarios', 'cmv', 'evolucion-compras', 'ajustes'];
         for (let v of order) {
             if (StorageManager.hasPermission(this.activeUser, v)) {
                 return v;
@@ -488,9 +516,25 @@ const App = {
             activeNavBtn.classList.add('bg-sky-600', 'text-white', 'shadow-sm');
         }
 
+        // Manejo de estado expandido del menú Proveedores
+        const isProvSubmenu = ['ordenes-compra', 'proveedores', 'compras-historial'].includes(viewId);
+        const provToggle = document.getElementById('nav-proveedores-toggle');
+        if (isProvSubmenu) {
+            this.toggleProveedoresNavMenu(true);
+            if (provToggle) {
+                provToggle.classList.add('text-teal-300', 'bg-slate-800/60');
+                provToggle.classList.remove('text-slate-300');
+            }
+        } else {
+            if (provToggle) {
+                provToggle.classList.remove('text-teal-300', 'bg-slate-800/60');
+                provToggle.classList.add('text-slate-300');
+            }
+        }
+
         const titles = {
             'dashboard': { title: 'Panel Principal', sub: 'Resumen operativo, compras recientes y cuentas a pagar' },
-            'compras-nueva': { title: 'Cargar Factura de Compra', sub: 'Liquidación impositiva (Neto, IVA, IIBB, Percepciones) y estado de pago' },
+            'compras-nueva': { title: 'Cargar Factura / Gasto', sub: 'Liquidación impositiva (Neto, IVA, IIBB, Percepciones) y estado de pago' },
             'ordenes-compra': { title: 'Órdenes de Compra a Proveedores', sub: 'Sugerencias de reposición por stock bajo y emisión de pedidos' },
             'proveedores': { title: 'Directorio de Proveedores', sub: 'Fichas comerciales, datos fiscales y formas de pago' },
             'inventarios': { title: 'Carga de Inventarios (II / IF)', sub: 'Planillas de conteo físico para inicio y cierre mensual' },
@@ -689,13 +733,13 @@ const App = {
         if (banner) banner.classList.add('hidden');
 
         const titleEl = document.getElementById('purchaseFormTitle');
-        if (titleEl) titleEl.textContent = 'Carga de Factura de Compra con Impuestos';
+        if (titleEl) titleEl.textContent = 'Carga de Factura / Gasto con Impuestos';
 
         const iconEl = document.getElementById('purchaseFormIcon');
         if (iconEl) iconEl.className = 'fa-solid fa-cart-shopping text-emerald-400';
 
         const submitBtnText = document.getElementById('purchaseSubmitBtnText');
-        if (submitBtnText) submitBtnText.textContent = 'Guardar Factura e Incrementar Stock';
+        if (submitBtnText) submitBtnText.textContent = 'Guardar Factura / Gasto e Incrementar Stock';
 
         const submitBtnIcon = document.getElementById('purchaseSubmitBtnIcon');
         if (submitBtnIcon) submitBtnIcon.className = 'fa-solid fa-check';

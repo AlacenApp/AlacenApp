@@ -80,16 +80,39 @@
                 </button>
                 <button onclick="App.navigate('compras-nueva')" id="nav-compras-nueva" data-perm="compras-nueva" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
                     <i class="fa-solid fa-cart-plus w-5 text-center text-emerald-400"></i>
-                    <span>Cargar Factura</span>
+                    <span>Cargar Factura / Gasto</span>
                 </button>
-                <button onclick="App.navigate('ordenes-compra')" id="nav-ordenes-compra" data-perm="ordenes-compra" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <i class="fa-solid fa-file-invoice w-5 text-center text-amber-400"></i>
-                    <span>Órdenes de Compra</span>
-                    <span class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">OC</span>
-                </button>
-                <button onclick="App.navigate('proveedores')" id="nav-proveedores" data-perm="proveedores" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <i class="fa-solid fa-truck-field w-5 text-center text-teal-400"></i>
-                    <span>Directorio Proveedores</span>
+
+                <!-- Desplegable Proveedores -->
+                <div id="nav-proveedores-group" class="space-y-1">
+                    <button type="button" onclick="App.toggleProveedoresNavMenu()" id="nav-proveedores-toggle" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white group">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-truck-field w-5 text-center text-teal-400"></i>
+                            <span class="font-medium">Proveedores</span>
+                        </div>
+                        <i id="nav-proveedores-chevron" class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform duration-200"></i>
+                    </button>
+                    <div id="nav-proveedores-submenu" class="pl-3 space-y-1 border-l-2 border-slate-800 ml-4 my-1">
+                        <button onclick="App.navigate('ordenes-compra')" id="nav-ordenes-compra" data-perm="ordenes-compra" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                            <i class="fa-solid fa-file-invoice w-4 text-center text-amber-400"></i>
+                            <span>Órdenes de Compra</span>
+                            <span class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">OC</span>
+                        </button>
+                        <button onclick="App.navigate('proveedores')" id="nav-proveedores" data-perm="proveedores" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                            <i class="fa-solid fa-address-book w-4 text-center text-teal-400"></i>
+                            <span>Directorio de Proveedores</span>
+                        </button>
+                        <button onclick="App.navigate('compras-historial')" id="nav-compras-historial" data-perm="compras-historial" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                            <i class="fa-solid fa-receipt w-4 text-center text-indigo-400"></i>
+                            <span>Historial de Pagos</span>
+                            <span id="badgePendingCount" class="ml-auto text-[10px] bg-red-500/30 text-red-300 px-1.5 py-0.5 rounded font-bold hidden">0</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button onclick="App.navigate('productos')" id="nav-productos" data-perm="productos" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-dolly w-5 text-center text-sky-400"></i>
+                    <span>Insumos y Categorías</span>
                 </button>
                 <button onclick="App.navigate('inventarios')" id="nav-inventarios" data-perm="inventarios" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
                     <i class="fa-solid fa-clipboard-list w-5 text-center text-sky-400"></i>
@@ -99,15 +122,6 @@
                     <i class="fa-solid fa-calculator w-5 text-center text-amber-400"></i>
                     <span>Control CMV Mensual</span>
                     <span class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">PPP</span>
-                </button>
-                <button onclick="App.navigate('productos')" id="nav-productos" data-perm="productos" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <i class="fa-solid fa-dolly w-5 text-center text-sky-400"></i>
-                    <span>Insumos y Categorías</span>
-                </button>
-                <button onclick="App.navigate('compras-historial')" id="nav-compras-historial" data-perm="compras-historial" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <i class="fa-solid fa-receipt w-5 text-center text-indigo-400"></i>
-                    <span>Historial y Pagos</span>
-                    <span id="badgePendingCount" class="ml-auto text-[10px] bg-red-500/30 text-red-300 px-1.5 py-0.5 rounded font-bold hidden">0</span>
                 </button>
                 <button onclick="App.navigate('evolucion-compras')" id="nav-evolucion-compras" data-perm="evolucion-compras" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
                     <i class="fa-solid fa-arrow-trend-up w-5 text-center text-emerald-400"></i>
