@@ -31,6 +31,9 @@ const App = {
         const purchaseDateInput = document.getElementById('purchaseDate');
         if (purchaseDateInput) purchaseDateInput.value = `${yyyy}-${mm}-${dd}`;
 
+        const purchasePaymentDateInput = document.getElementById('purchasePaymentDate');
+        if (purchasePaymentDateInput) purchasePaymentDateInput.value = `${yyyy}-${mm}-${dd}`;
+
         const cmvPeriodInput = document.getElementById('cmvPeriodInput');
         if (cmvPeriodInput) cmvPeriodInput.value = this.activePeriod;
 
@@ -702,7 +705,12 @@ const App = {
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
-        document.getElementById('purchaseDate').value = `${yyyy}-${mm}-${dd}`;
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        document.getElementById('purchaseDate').value = todayStr;
+        const purchasePaymentDateInput = document.getElementById('purchasePaymentDate');
+        if (purchasePaymentDateInput) purchasePaymentDateInput.value = todayStr;
+        document.getElementById('purchasePaymentStatus').value = 'pagada';
+        document.getElementById('purchasePaymentMethod').value = 'Efectivo';
 
         const settings = StorageManager.getSettings();
         document.getElementById('taxIvaRate').value = settings.defaultIvaRate || '21';
@@ -750,6 +758,10 @@ const App = {
         document.getElementById('purchaseInvoice').value = purchase.invoiceNumber || '';
         document.getElementById('purchasePaymentStatus').value = purchase.paymentStatus || 'pagada';
         document.getElementById('purchasePaymentMethod').value = purchase.paymentMethod || 'Efectivo';
+        const purchasePaymentDateInput = document.getElementById('purchasePaymentDate');
+        if (purchasePaymentDateInput) {
+            purchasePaymentDateInput.value = purchase.paymentDate || (purchase.paymentStatus === 'pagada' ? (purchase.date || '') : '');
+        }
         document.getElementById('purchaseNotes').value = purchase.notes || '';
         document.getElementById('purchaseCostMode').value = purchase.costMode || 'net';
 
@@ -857,11 +869,27 @@ const App = {
         this.calculatePurchaseTotals();
     },
 
+    handlePurchaseDateChange(newDate) {
+        const payDateInput = document.getElementById('purchasePaymentDate');
+        const payStatus = document.getElementById('purchasePaymentStatus')?.value;
+        if (payDateInput && payStatus === 'pagada') {
+            if (!payDateInput.value) {
+                payDateInput.value = newDate;
+            }
+        }
+    },
+
     handlePurchasePaymentStatusChange(status) {
+        const payDateInput = document.getElementById('purchasePaymentDate');
+        const invoiceDate = document.getElementById('purchaseDate')?.value;
         if (status === 'pendiente') {
             document.getElementById('purchasePaymentMethod').value = 'Cuenta Corriente / A Pagar';
+            if (payDateInput) payDateInput.value = '';
         } else {
             document.getElementById('purchasePaymentMethod').value = 'Efectivo';
+            if (payDateInput && !payDateInput.value) {
+                payDateInput.value = invoiceDate || new Date().toISOString().split('T')[0];
+            }
         }
     },
 
@@ -1161,6 +1189,10 @@ const App = {
             const paymentStatus = document.getElementById('purchasePaymentStatus').value;
             const paymentMethod = document.getElementById('purchasePaymentMethod').value;
             const purchaseDate = document.getElementById('purchaseDate').value;
+            const paymentDateInput = document.getElementById('purchasePaymentDate')?.value || '';
+            const paymentDate = paymentStatus === 'pagada'
+                ? (paymentDateInput || purchaseDate)
+                : (paymentDateInput || '');
 
             const purchaseData = {
                 date: purchaseDate,
@@ -1168,7 +1200,7 @@ const App = {
                 supplier: supplierName,
                 invoiceNumber: document.getElementById('purchaseInvoice').value.trim(),
                 paymentStatus: paymentStatus,
-                paymentDate: paymentStatus === 'pagada' ? purchaseDate : '',
+                paymentDate: paymentDate,
                 paymentMethod: paymentMethod,
                 notes: document.getElementById('purchaseNotes').value.trim(),
                 updateCostPrices: document.getElementById('purchaseUpdateCost').checked,
