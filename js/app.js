@@ -936,7 +936,7 @@ const App = {
         }
     },
 
-    addPurchaseRow(defaultProductId = '', defaultQty = 1, defaultCost = 0, defaultDiscountPct = 0, defaultDiscountVal = 0) {
+    addPurchaseRow(defaultProductId = '', defaultQty = 1, defaultCost = 0, defaultDiscountPct = 0, defaultDiscountVal = 0, autoFocus = false) {
         const tbody = document.getElementById('purchaseItemsTableBody');
         const supSelect = document.getElementById('purchaseSupplierSelect');
         const selectedSupplierId = supSelect ? supSelect.value : '';
@@ -1006,6 +1006,57 @@ const App = {
         }
 
         this.calculatePurchaseTotals();
+
+        if (autoFocus) {
+            const selectEl = row.querySelector('.row-product-select');
+            if (selectEl) {
+                setTimeout(() => {
+                    selectEl.focus();
+                    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 50);
+            }
+        }
+
+        return row;
+    },
+
+    handlePurchaseHeaderKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const firstRowSelect = document.querySelector('#purchaseItemsTableBody .row-product-select');
+            if (firstRowSelect) {
+                firstRowSelect.focus();
+            } else {
+                this.addPurchaseRow('', 1, 0, 0, 0, true);
+            }
+        }
+    },
+
+    handlePurchaseRowKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Si está en el selector de producto y no seleccionó nada todavía, no crear otro vacío
+            if (event.target.classList.contains('row-product-select') && !event.target.value) {
+                return;
+            }
+
+            // Si el último renglón ya está completamente vacío (sin producto), enfocar ese en vez de duplicar
+            const rows = document.querySelectorAll('#purchaseItemsTableBody .purchase-item-row');
+            if (rows.length > 0) {
+                const lastRow = rows[rows.length - 1];
+                const lastSelect = lastRow.querySelector('.row-product-select');
+                if (lastSelect && !lastSelect.value && event.target !== lastSelect) {
+                    lastSelect.focus();
+                    lastRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    return;
+                }
+            }
+
+            // Crear nuevo renglón y enfocar su selector de insumo
+            this.addPurchaseRow('', 1, 0, 0, 0, true);
+        }
     },
 
     removePurchaseRow(btn) {

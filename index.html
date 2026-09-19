@@ -320,7 +320,7 @@
 
                             <div>
                                 <label class="block text-xs font-semibold text-slate-700 mb-1">Nº Factura / Remito</label>
-                                <input type="text" id="purchaseInvoice" placeholder="Ej: FC-A 0001-00045" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                                <input type="text" id="purchaseInvoice" onkeydown="App.handlePurchaseHeaderKeydown(event)" placeholder="Ej: FC-A 0001-00045" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
                             </div>
 
                             <div>
@@ -376,15 +376,18 @@
                                             <th class="py-3 px-2 text-center"></th>
                                         </tr>
                                     </thead>
-                                    <tbody id="purchaseItemsTableBody" class="divide-y divide-slate-200 bg-white">
+                                    <tbody id="purchaseItemsTableBody" onkeydown="App.handlePurchaseRowKeydown(event)" class="divide-y divide-slate-200 bg-white">
                                         <!-- Filas dinámicas -->
                                     </tbody>
                                 </table>
                             </div>
 
-                            <button type="button" onclick="App.addPurchaseRow()" class="w-full py-2.5 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2">
+                            <button type="button" onclick="App.addPurchaseRow('', 1, 0, 0, 0, true)" class="w-full py-2.5 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-2">
                                 <i class="fa-solid fa-plus"></i>
                                 <span>Agregar otro renglón de compra</span>
+                                <span class="bg-sky-200/80 text-sky-800 text-[10px] px-2 py-0.5 rounded font-mono font-bold ml-1 flex items-center gap-1">
+                                    <i class="fa-solid fa-keyboard text-[9px]"></i> o presiona ENTER ↵
+                                </span>
                             </button>
                         </div>
 
