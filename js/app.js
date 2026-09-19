@@ -595,9 +595,8 @@ const App = {
             totalStockValuation += (p.currentStock || 0) * (p.costPrice || 0);
         });
 
-        document.getElementById('dashTotalProducts').textContent = totalProducts;
-        document.getElementById('dashLowStockCount').innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${lowStockProducts.length} con stock bajo o crítico`;
-        document.getElementById('dashTotalStockValue').textContent = `${curr} ${totalStockValuation.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+        const dashStockValEl = document.getElementById('dashTotalStockValue');
+        if (dashStockValEl) dashStockValEl.textContent = `${curr} ${totalStockValuation.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
 
         const cmvData = CMVManager.calculatePeriodCMV(this.activePeriod);
         const purchases = StorageManager.getPurchases().filter(p => p.date && p.date.startsWith(this.activePeriod));

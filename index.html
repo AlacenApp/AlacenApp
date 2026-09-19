@@ -167,22 +167,8 @@
             <!-- VIEW: DASHBOARD -->
             <section id="view-dashboard" class="p-6 space-y-6 animate-fade-in">
                 <!-- KPI Stat Cards -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                    <!-- Card 1: Insumos Totales -->
-                    <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
-                        <div>
-                            <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Insumos Registrados</p>
-                            <h3 id="dashTotalProducts" class="text-2xl font-black text-slate-800 mt-1">0</h3>
-                            <p id="dashLowStockCount" class="text-xs font-medium text-amber-600 mt-1 flex items-center gap-1">
-                                <i class="fa-solid fa-triangle-exclamation"></i> 0 con stock bajo
-                            </p>
-                        </div>
-                        <div class="w-12 h-12 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center text-xl">
-                            <i class="fa-solid fa-boxes-stacked"></i>
-                        </div>
-                    </div>
-
-                    <!-- Card 2: Valor Total Stock -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <!-- Card 1: Valor Total Stock -->
                     <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                         <div>
                             <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Valor Total Stock</p>
@@ -194,7 +180,7 @@
                         </div>
                     </div>
 
-                    <!-- Card 3: Compras del Mes -->
+                    <!-- Card 2: Compras del Mes -->
                     <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                         <div>
                             <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Compras del Mes (Neto)</p>
@@ -206,7 +192,7 @@
                         </div>
                     </div>
 
-                    <!-- Card 4: Cuentas a Pagar (Facturas pendientes) -->
+                    <!-- Card 3: Cuentas a Pagar (Facturas pendientes) -->
                     <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
                         <div>
                             <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Cuentas a Pagar</p>
@@ -217,22 +203,6 @@
                             <i class="fa-solid fa-clock"></i>
                         </div>
                     </div>
-                </div>
-
-                <!-- Equation Banner for CMV Formula -->
-                <div class="bg-gradient-to-r from-sky-900 to-indigo-950 rounded-xl p-4 text-white shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-sky-500/20 text-sky-300 flex items-center justify-center text-lg">
-                            <i class="fa-solid fa-scale-balanced"></i>
-                        </div>
-                        <div>
-                            <h4 class="font-bold text-sm">Fórmula de Valuación Contable del CMV</h4>
-                            <p class="text-xs text-sky-200">Costo de Mercadería Vendida = Inventario Inicial + Compras del Mes - Inventario Final (valuado a Precio Promedio Ponderado PPP)</p>
-                        </div>
-                    </div>
-                    <button onclick="App.navigate('cmv')" class="text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 px-4 py-2 rounded-lg transition-colors whitespace-nowrap shadow-sm">
-                        Ver Control CMV Mensual &rarr;
-                    </button>
                 </div>
 
                 <!-- Alerts & Recent Purchases Grid -->
