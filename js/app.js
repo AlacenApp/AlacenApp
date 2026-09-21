@@ -4398,3 +4398,21 @@ const App = {
         }
     }
 };
+// ==========================================
+// DETECTAR SESIÓN AUTOMÁTICAMENTE AL CARGAR LA PÁGINA
+// ==========================================
+db.auth.onAuthStateChange((event, session) => {
+  if (session) {
+    // Si hay una sesión activa:
+    console.log("Usuario autenticado:", session.user.email);
+    
+    // Ocultar la caja de login si existe
+    const cajaLogin = document.getElementById('caja-login');
+    if (cajaLogin) cajaLogin.style.display = 'none';
+
+    // Cargar locales automáticamente
+    cargarLocalesDelUsuario();
+  } else {
+    console.log("No hay sesión activa.");
+  }
+});
