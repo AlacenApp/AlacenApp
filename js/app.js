@@ -4416,3 +4416,87 @@ db.auth.onAuthStateChange((event, session) => {
     console.log("No hay sesión activa.");
   }
 });
+// ==========================================
+// CERRAR SESIÓN (Actualizado)
+// ==========================================
+async function cerrarSesion() {
+  const { error } = await db.auth.signOut();
+  if (error) {
+    console.error("Error al salir:", error.message);
+  } else {
+    alert("Sesión cerrada correctamente");
+    
+    // 1. Volver a mostrar la caja de login
+    const cajaLogin = document.getElementById('caja-login');
+    if (cajaLogin) cajaLogin.style.display = 'block';
+    
+    // 2. Limpiar el selector de locales
+    const selector = document.getElementById('selectorLocales');
+    if (selector) {
+      selector.innerHTML = '<option value="">Inicia sesión para ver locales</option>';
+    }
+  }
+}
+
+
+// ==========================================
+// OBTENER LOCALES SEGÚN EL ROL (Con diagnóstico)
+// ==========================================
+async function cargarLocalesDelUsuario() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) {
+    console.log("No hay ningún usuario autenticado.");
+    return;
+  }
+  console.log("Usuario autenticado ID:", user.id);
+
+  // Consultar perfil
+  const { data: perfil, error: errorPerfil } = await db
+    .from('Perfiles')
+    .select('rol')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (errorPerfil) {
+    console.error("Error al obtener el perfil:", errorPerfil.message);
+    return;
+  }
+  
+  // Si no tiene perfil creado todavía, asumimos un rol por defecto o vacío
+  const rolActual = perfil ? perfil.rol : 'MANAGER';
+  console.log(`Rol detectado en BD: ${rolActual}`);
+
+  let localesDisponibles = [];
+
+  if (rolActual === 'SUPERADMIN') {
+    const { data, error } = await db.from('Locales').select('*');
+    if (error) console.error("Error al buscar locales:", error);
+    localesDisponibles = data || [];
+  } else {
+    const { data, error } = await db
+      .from('Usuarios_Locales')
+      .select('local_id, Locales(*)')
+      .eq('perfil_id', user.id);
+
+    if (error) console.error("Error al buscar relaciones:", error);
+    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
+  }
+
+  console.log("Locales obtenidos para pintar:", localesDisponibles);
+
+  // Pintar en el HTML
+  const selector = document.getElementById('selectorLocales');
+  if (selector) {
+    if (localesDisponibles.length === 0) {
+      selector.innerHTML = '<option value="">No hay locales disponibles</option>';
+    } else {
+      selector.innerHTML = localesDisponibles.map(local => 
+        `<option value="${local.id}">${local.nombre_local}</option>`
+      ).join('');
+    }
+  } else {
+    console.warn("No se encontró el elemento HTML con id 'selectorLocales'");
+  }
+
+  return localesDisponibles;
+}
