@@ -1,18 +1,20 @@
 // ==========================================
-// 1. CONFIGURACIÓN Y CLIENTE SUPABASE
+// 1. GARANTIZAR OBJETO GLOBAL Y SUPABASE
 // ==========================================
+window.App = window.App || {};
+
 window.SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
 window.SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
 
-if (!window.db) {
+if (!window.db && window.supabase) {
   window.db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
 }
 var db = window.db;
 
 // ==========================================
-// 2. OBJETO GLOBAL APP (DISPONIBLE PARA ONCLICK)
+// 2. MÓDULO PRINCIPAL DE NAVEGACIÓN Y VISTAS
 // ==========================================
-window.App = {
+Object.assign(window.App, {
     currentView: 'dashboard',
     activePeriod: '',
     inventorySubTab: 'inicial',
@@ -24,7 +26,7 @@ window.App = {
     sidebarHidden: false,
     _selectedSecondarySupplierIds: [],
 
-    init() {
+    init: function() {
         const today = new Date();
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -66,20 +68,20 @@ window.App = {
         this.renderDashboard();
     },
 
-    updateHeaderBusinessInfo() {
+    updateHeaderBusinessInfo: function() {
         if (typeof StorageManager === 'undefined') return;
         const settings = StorageManager.getSettings();
         const headerName = document.getElementById('headerBusinessName');
         if (headerName) headerName.textContent = settings.businessName || 'Control de Stock & CMV';
     },
 
-    toggleSidebar() {
+    toggleSidebar: function() {
         this.sidebarHidden = !this.sidebarHidden;
         localStorage.setItem('sidebar_hidden', this.sidebarHidden);
         this._applySidebarState(true);
     },
 
-    _applySidebarState(animate) {
+    _applySidebarState: function(animate) {
         const sidebar = document.getElementById('appSidebar');
         if (!sidebar) return;
         if (this.sidebarHidden) {
@@ -95,7 +97,8 @@ window.App = {
         }
     },
 
-    toggleProveedoresNavMenu(forceState = null) {
+    toggleProveedoresNavMenu: function(forceState) {
+        if (forceState === undefined) forceState = null;
         const submenu = document.getElementById('nav-proveedores-submenu');
         const chevron = document.getElementById('nav-proveedores-chevron');
         if (!submenu) return;
@@ -109,7 +112,7 @@ window.App = {
         }
     },
 
-    applyUserPermissions() {
+    applyUserPermissions: function() {
         if (typeof StorageManager === 'undefined') return;
         if (!this.activeUser) this.activeUser = StorageManager.getActiveUser();
         const user = this.activeUser;
@@ -121,7 +124,7 @@ window.App = {
         if (sidebarAvatar && user.name) sidebarAvatar.textContent = user.name.charAt(0).toUpperCase();
     },
 
-    populateDropdowns() {
+    populateDropdowns: function() {
         if (typeof StorageManager === 'undefined') return;
         const suppliers = StorageManager.getSuppliers();
         const categories = StorageManager.getCategories();
@@ -156,7 +159,8 @@ window.App = {
         }
     },
 
-    navigate(viewId, params = {}) {
+    navigate: function(viewId, params) {
+        if (!params) params = {};
         this.currentView = viewId;
         const views = document.querySelectorAll('main > section');
         views.forEach(v => v.classList.add('hidden'));
@@ -207,7 +211,8 @@ window.App = {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     },
 
-    showToast(message, type = 'success') {
+    showToast: function(message, type) {
+        if (!type) type = 'success';
         const container = document.getElementById('toastContainer');
         if (!container) return;
         const toast = document.createElement('div');
@@ -217,7 +222,7 @@ window.App = {
         setTimeout(() => toast.remove(), 3000);
     },
 
-    renderDashboard() {
+    renderDashboard: function() {
         if (typeof StorageManager === 'undefined') return;
         const products = StorageManager.getProducts();
         let totalStockValuation = 0;
@@ -248,7 +253,7 @@ window.App = {
         }
     },
 
-    resetPurchaseForm() {
+    resetPurchaseForm: function() {
         const form = document.getElementById('purchaseForm');
         if (form) form.reset();
         const tbody = document.getElementById('purchaseItemsTableBody');
@@ -258,10 +263,13 @@ window.App = {
         }
     },
 
-    addPurchaseRow(defaultProductId = '', defaultQty = 1, defaultCost = 0) {
+    addPurchaseRow: function(defaultProductId, defaultQty, defaultCost) {
+        if (defaultProductId === undefined) defaultProductId = '';
+        if (defaultQty === undefined) defaultQty = 1;
+        if (defaultCost === undefined) defaultCost = 0;
+
         const tbody = document.getElementById('purchaseItemsTableBody');
         if (!tbody) return;
-        const suppliers = typeof StorageManager !== 'undefined' ? StorageManager.getSuppliers() : [];
         const products = typeof StorageManager !== 'undefined' ? StorageManager.getProducts() : [];
 
         const row = document.createElement('tr');
@@ -285,12 +293,12 @@ window.App = {
         tbody.appendChild(row);
     },
 
-    removePurchaseRow(btn) {
+    removePurchaseRow: function(btn) {
         const row = btn.closest('tr');
         if (row) row.remove();
     },
 
-    renderSuppliersView() {
+    renderSuppliersView: function() {
         if (typeof StorageManager === 'undefined') return;
         const suppliers = StorageManager.getSuppliers();
         const tbody = document.getElementById('suppliersTableBody');
@@ -315,7 +323,7 @@ window.App = {
         `).join('');
     },
 
-    renderProductsTable() {
+    renderProductsTable: function() {
         if (typeof StorageManager === 'undefined') return;
         const products = StorageManager.getProducts();
         const tbody = document.getElementById('productsTableBody');
@@ -343,45 +351,46 @@ window.App = {
         `).join('');
     },
 
-    renderPurchasesTable() {},
-    renderOCHistoryTable() {},
-    renderInventorySheets() {},
-    renderCMVView() {},
-    renderEvolucionProveedor() {},
-    renderUsersTable() {},
-    openProductModal(id = null) { document.getElementById('productModal')?.classList.remove('hidden'); },
-    closeProductModal() { document.getElementById('productModal')?.classList.add('hidden'); },
-    openSupplierModal(id = null) { document.getElementById('supplierModal')?.classList.remove('hidden'); },
-    closeSupplierModal() { document.getElementById('supplierModal')?.classList.add('hidden'); },
-    openUserModal(id = null) { document.getElementById('userModal')?.classList.remove('hidden'); },
-    closeUserModal() { document.getElementById('userModal')?.classList.add('hidden'); },
-    openSnapshotModal() { document.getElementById('snapshotModal')?.classList.remove('hidden'); },
-    closeSnapshotModal() { document.getElementById('snapshotModal')?.classList.add('hidden'); },
-    openCategoryManagerModal() { document.getElementById('categoryManagerModal')?.classList.remove('hidden'); },
-    closeCategoryManagerModal() { document.getElementById('categoryManagerModal')?.classList.add('hidden'); },
-    openPaymentModal() { document.getElementById('paymentModal')?.classList.remove('hidden'); },
-    closePaymentModal() { document.getElementById('paymentModal')?.classList.add('hidden'); },
-    openImportModal() { document.getElementById('importModal')?.classList.remove('hidden'); },
-    closeImportModal() { document.getElementById('importModal')?.classList.add('hidden'); },
-    handleSaveProduct(e) { e.preventDefault(); this.closeProductModal(); },
-    handleSaveSupplier(e) { e.preventDefault(); this.closeSupplierModal(); },
-    handleSaveUser(e) { e.preventDefault(); this.closeUserModal(); },
-    handleSavePayment(e) { e.preventDefault(); this.closePaymentModal(); },
-    handleSaveCategory(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
-    handleSavePurchase(e) { e.preventDefault(); this.navigate('compras-historial'); },
-    saveSettings(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
-    loadDemoData() {
+    renderPurchasesTable: function() {},
+    renderOCHistoryTable: function() {},
+    renderInventorySheets: function() {},
+    renderCMVView: function() {},
+    renderEvolucionProveedor: function() {},
+    renderUsersTable: function() {},
+    openProductModal: function(id) { document.getElementById('productModal')?.classList.remove('hidden'); },
+    closeProductModal: function() { document.getElementById('productModal')?.classList.add('hidden'); },
+    openSupplierModal: function(id) { document.getElementById('supplierModal')?.classList.remove('hidden'); },
+    closeSupplierModal: function() { document.getElementById('supplierModal')?.classList.add('hidden'); },
+    openUserModal: function(id) { document.getElementById('userModal')?.classList.remove('hidden'); },
+    closeUserModal: function() { document.getElementById('userModal')?.classList.add('hidden'); },
+    openSnapshotModal: function() { document.getElementById('snapshotModal')?.classList.remove('hidden'); },
+    closeSnapshotModal: function() { document.getElementById('snapshotModal')?.classList.add('hidden'); },
+    openCategoryManagerModal: function() { document.getElementById('categoryManagerModal')?.classList.remove('hidden'); },
+    closeCategoryManagerModal: function() { document.getElementById('categoryManagerModal')?.classList.add('hidden'); },
+    openPaymentModal: function() { document.getElementById('paymentModal')?.classList.remove('hidden'); },
+    closePaymentModal: function() { document.getElementById('paymentModal')?.classList.add('hidden'); },
+    openImportModal: function() { document.getElementById('importModal')?.classList.remove('hidden'); },
+    closeImportModal: function() { document.getElementById('importModal')?.classList.add('hidden'); },
+    handleSaveProduct: function(e) { e.preventDefault(); this.closeProductModal(); },
+    handleSaveSupplier: function(e) { e.preventDefault(); this.closeSupplierModal(); },
+    handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
+    handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
+    handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
+    handleSavePurchase: function(e) { e.preventDefault(); this.navigate('compras-historial'); },
+    saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
+    loadDemoData: function() {
         if (typeof StorageManager !== 'undefined') {
             StorageManager.loadDemoData();
             this.init();
         }
     }
-};
+});
 
-var App = window.App;
+// Alias global directo
+window.App = window.App;
 
 // ==========================================
-// 3. FUNCIONES DE AUTENTICACIÓN
+// 3. FUNCIONES DE AUTENTICACIÓN SUPABASE
 // ==========================================
 window.botonLogin = async function() {
   const emailInput = document.getElementById('input-email');
@@ -439,21 +448,23 @@ async function cargarLocalesDelUsuario() {
 }
 
 // ==========================================
-// 4. DETECTOR DE SESIÓN Y NAVEGACIÓN
+// 4. DETECTOR DE CAMBIOS DE SESIÓN
 // ==========================================
-db.auth.onAuthStateChange((event, session) => {
-  const cajaLogin = document.getElementById('caja-login');
-  const cajaApp = document.getElementById('caja-app');
+if (db && db.auth) {
+  db.auth.onAuthStateChange((event, session) => {
+    const cajaLogin = document.getElementById('caja-login');
+    const cajaApp = document.getElementById('caja-app');
 
-  if (session) {
-    if (cajaLogin) cajaLogin.style.display = 'none';
-    if (cajaApp) cajaApp.style.display = 'flex';
-    cargarLocalesDelUsuario();
-    if (window.App && typeof window.App.init === 'function') {
-      window.App.init();
+    if (session) {
+      if (cajaLogin) cajaLogin.style.display = 'none';
+      if (cajaApp) cajaApp.style.display = 'flex';
+      cargarLocalesDelUsuario();
+      if (window.App && typeof window.App.init === 'function') {
+        window.App.init();
+      }
+    } else {
+      if (cajaLogin) cajaLogin.style.display = 'block';
+      if (cajaApp) cajaApp.style.display = 'none';
     }
-  } else {
-    if (cajaLogin) cajaLogin.style.display = 'block';
-    if (cajaApp) cajaApp.style.display = 'none';
-  }
-});
+  });
+}

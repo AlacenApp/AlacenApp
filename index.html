@@ -1,5 +1,15 @@
 <!DOCTYPE html>
 <html lang="es">
+    <script>
+        // Define la variable global App inmediatamente para evitar errores ReferenceError
+        window.App = window.App || {
+            navigate: function(v){ console.warn("App aún cargando...", v); },
+            toggleSidebar: function(){},
+            toggleProveedoresNavMenu: function(){},
+            loadDemoData: function(){}
+        };
+    </script>
+</head>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
