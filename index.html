@@ -303,7 +303,7 @@
                         </button>
                     </div>
 
-                    <form id="purchaseForm" onsubmit="App.handleSavePurchase(event)" class="p-6 space-y-6">
+                    <form id="purchaseForm" onsubmit="App.handleSavePurchase(event)" onkeydown="App.handlePurchaseFormKeydown(event)" class="p-6 space-y-6">
                         <input type="hidden" id="purchaseEditId" value="">
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
                             <div>

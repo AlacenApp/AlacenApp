@@ -1020,43 +1020,28 @@ const App = {
         return row;
     },
 
-    handlePurchaseHeaderKeydown(event) {
+    handlePurchaseFormKeydown(event) {
         if (event.key === 'Enter') {
-            event.preventDefault();
-            const firstRowSelect = document.querySelector('#purchaseItemsTableBody .row-product-select');
-            if (firstRowSelect) {
-                firstRowSelect.focus();
-            } else {
-                this.addPurchaseRow('', 1, 0, 0, 0, true);
-            }
-        }
-    },
+            // Permitir salto de línea normal si está escribiendo notas en textarea
+            if (event.target.tagName === 'TEXTAREA') return;
 
-    handlePurchaseRowKeydown(event) {
-        if (event.key === 'Enter') {
+            // Si está directamente enfocado en el botón de guardar, permitir el submit
+            if (event.target.type === 'submit' || event.target.id === 'purchaseSubmitBtn' || event.target.closest('#purchaseSubmitBtn')) return;
+
             event.preventDefault();
             event.stopPropagation();
 
-            // Si está en el selector de producto y no seleccionó nada todavía, no crear otro vacío
-            if (event.target.classList.contains('row-product-select') && !event.target.value) {
-                return;
-            }
-
-            // Si el último renglón ya está completamente vacío (sin producto), enfocar ese en vez de duplicar
-            const rows = document.querySelectorAll('#purchaseItemsTableBody .purchase-item-row');
-            if (rows.length > 0) {
-                const lastRow = rows[rows.length - 1];
-                const lastSelect = lastRow.querySelector('.row-product-select');
-                if (lastSelect && !lastSelect.value && event.target !== lastSelect) {
-                    lastSelect.focus();
-                    lastRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    return;
-                }
-            }
-
-            // Crear nuevo renglón y enfocar su selector de insumo
+            // Agregar nuevo renglón de compra y enfocarlo de inmediato
             this.addPurchaseRow('', 1, 0, 0, 0, true);
         }
+    },
+
+    handlePurchaseHeaderKeydown(event) {
+        this.handlePurchaseFormKeydown(event);
+    },
+
+    handlePurchaseRowKeydown(event) {
+        this.handlePurchaseFormKeydown(event);
     },
 
     removePurchaseRow(btn) {
