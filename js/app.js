@@ -1,3 +1,51 @@
+// Inicialización de Supabase
+const supabaseUrl = 'https://ayyieaupiltisnrabdzn.supabase.co';
+const supabaseKey = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
+
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+// ==========================================
+// FUNCIONES DE AUTENTICACIÓN (SUPABASE AUTH)
+// ==========================================
+
+// 1. Registrar un nuevo usuario
+async function registrarUsuario(email, password) {
+  const { data, error } = await supabase.auth.signUp({
+    email: email,
+    password: password,
+  });
+
+  if (error) {
+    alert("Error al registrar: " + error.message);
+    console.error(error);
+  } else {
+    alert("¡Usuario registrado con éxito! Revisa tu correo o inicia sesión.");
+    console.log("Usuario creado:", data);
+  }
+}
+
+// 2. Iniciar Sesión
+async function iniciarSesion(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email,
+    password: password,
+  });
+
+  if (error) {
+    alert("Error al iniciar sesión: " + error.message);
+    console.error(error);
+  } else {
+    alert("¡Sesión iniciada correctamente!");
+    console.log("Datos de sesión:", data);
+    // Aquí luego llamaremos a la función que carga los locales del usuario
+  }
+}
+
+// 3. Cerrar Sesión
+async function cerrarSesion() {
+  const { error } = await supabase.auth.signOut();
+  if (error) console.error("Error al salir:", error.message);
+  else alert("Sesión cerrada");
+}
 /**
  * App Controller
  * Orquestador principal de la interfaz, eventos, navegación, cálculo de impuestos,
