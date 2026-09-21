@@ -2230,6 +2230,30 @@
     <script src="js/cmv.js"></script>
     <script src="js/app.js"></script>
 </body>
+<!-- PANTALLA 1: FORMULARIO DE LOGIN -->
+<div id="caja-login" style="max-width: 350px; margin: 30px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; font-family: sans-serif;">
+  <h2 style="margin-top: 0;">Iniciar Sesión</h2>
+  <input type="email" id="input-email" placeholder="Tu correo" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px;" />
+  <input type="password" id="input-pass" placeholder="Tu contraseña" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 15px;" />
+  <button onclick="botonLogin()" style="width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+    Ingresar
+  </button>
+</div>
+
+<!-- PANTALLA 2: PANEL DE LA APP (Oculto por defecto) -->
+<div id="caja-app" style="display: none; max-width: 500px; margin: 30px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; font-family: sans-serif;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+    <h3 style="margin: 0;">AlacenApp</h3>
+    <button onclick="cerrarSesion()" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      Cerrar Sesión
+    </button>
+  </div>
+  
+  <label for="selectorLocales"><strong>Local activo:</strong></label>
+  <select id="selectorLocales" style="width: 100%; padding: 8px; margin-top: 5px;">
+    <option value="">Cargando locales...</option>
+  </select>
+</div>
 <!-- Botón para cerrar sesión -->
 <div style="margin: 15px 0;">
   <button onclick="cerrarSesion()" style="padding: 8px 15px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">

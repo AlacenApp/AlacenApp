@@ -4500,3 +4500,21 @@ async function cargarLocalesDelUsuario() {
 
   return localesDisponibles;
 }
+// ==========================================
+// CONTROL DE VISIBILIDAD Y SESIÓN
+// ==========================================
+db.auth.onAuthStateChange((event, session) => {
+  const cajaLogin = document.getElementById('caja-login');
+  const cajaApp = document.getElementById('caja-app');
+
+  if (session) {
+    // Si hay usuario logueado: ocultar login, mostrar app y cargar locales
+    if (cajaLogin) cajaLogin.style.display = 'none';
+    if (cajaApp) cajaApp.style.display = 'block';
+    cargarLocalesDelUsuario();
+  } else {
+    // Si NO hay usuario: mostrar login y ocultar app
+    if (cajaLogin) cajaLogin.style.display = 'block';
+    if (cajaApp) cajaApp.style.display = 'none';
+  }
+});
