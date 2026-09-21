@@ -1,12 +1,49 @@
 // ==========================================
-// 1. INICIALIZACIÓN DE SUPABASE (Protegida)
+// INICIALIZACIÓN DE SUPABASE (Ámbito Global)
 // ==========================================
-var SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
-var SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
+window.SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
+window.SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
 
-// Usamos window.db para evitar redeclaraciones de constantes
-window.db = window.db || window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+if (!window.db) {
+  window.db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+}
 var db = window.db;
+
+// ==========================================
+// FUNCIONES EXPUESTAS AL HTML
+// ==========================================
+window.botonLogin = async function() {
+  const emailInput = document.getElementById('input-email');
+  const passInput = document.getElementById('input-pass');
+
+  if (!emailInput || !passInput) return;
+
+  const email = emailInput.value.trim();
+  const password = passInput.value.trim();
+
+  if (!email || !password) {
+    alert("Por favor completa correo y contraseña");
+    return;
+  }
+
+  const { error } = await db.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    alert("Error al iniciar sesión: " + error.message);
+  }
+};
+
+window.cerrarSesion = async function() {
+  const { error } = await db.auth.signOut();
+  if (error) {
+    console.error("Error al salir:", error.message);
+  } else {
+    const cajaLogin = document.getElementById('caja-login');
+    const cajaApp = document.getElementById('caja-app');
+    if (cajaLogin) cajaLogin.style.display = 'block';
+    if (cajaApp) cajaApp.style.display = 'none';
+  }
+};
 
 // ==========================================
 // 2. FUNCIONES DE AUTENTICACIÓN
