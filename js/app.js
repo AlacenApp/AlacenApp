@@ -10,7 +10,7 @@ if (!window.db && window.supabase) {
 var db = window.db;
 
 // ==========================================
-// 2. OBJETO GLOBAL APP (COMPLETO)
+// 2. OBJETO GLOBAL APP
 // ==========================================
 window.App = {
     currentView: 'dashboard',
@@ -22,7 +22,6 @@ window.App = {
     pendingProductForPurchase: false,
     activeUser: null,
     sidebarHidden: false,
-    _selectedSecondarySupplierIds: [],
 
     init: function() {
         const today = new Date();
@@ -51,15 +50,6 @@ window.App = {
 
         const purchasesMonthFilter = document.getElementById('purchasesMonthFilter');
         if (purchasesMonthFilter) purchasesMonthFilter.value = this.activePeriod;
-
-        if (typeof StorageManager !== 'undefined') {
-            const products = StorageManager.getProducts();
-            if (!products || products.length === 0) {
-                StorageManager.loadDemoData();
-            }
-            this.activeUser = StorageManager.getActiveUser();
-            this.applyUserPermissions();
-        }
 
         this.populateDropdowns();
         this.updateHeaderBusinessInfo();
@@ -110,18 +100,6 @@ window.App = {
         }
     },
 
-    applyUserPermissions: function() {
-        if (typeof StorageManager === 'undefined') return;
-        if (!this.activeUser) this.activeUser = StorageManager.getActiveUser();
-        const user = this.activeUser;
-        if (!user) return;
-
-        const sidebarName = document.getElementById('sidebarUserName');
-        const sidebarAvatar = document.getElementById('sidebarUserAvatar');
-        if (sidebarName) sidebarName.textContent = user.name || 'Usuario';
-        if (sidebarAvatar && user.name) sidebarAvatar.textContent = user.name.charAt(0).toUpperCase();
-    },
-
     populateDropdowns: async function() {
         let suppliers = [];
         let categories = [];
@@ -137,18 +115,6 @@ window.App = {
         const purchaseSupSelect = document.getElementById('purchaseSupplierSelect');
         if (purchaseSupSelect) {
             purchaseSupSelect.innerHTML = '<option value="">-- Seleccionar Proveedor --</option>' +
-                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-        }
-
-        const ocSupSelect = document.getElementById('ocSupplierSelect');
-        if (ocSupSelect) {
-            ocSupSelect.innerHTML = '<option value="">-- Elige un proveedor --</option>' +
-                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-        }
-
-        const prodSupSelect = document.getElementById('prodFormSupplierSelect');
-        if (prodSupSelect) {
-            prodSupSelect.innerHTML = '<option value="">-- Sin proveedor asignado --</option>' +
                 suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
         }
 
@@ -205,15 +171,7 @@ window.App = {
         if (pageSubtitle && titles[viewId]) pageSubtitle.textContent = titles[viewId].sub;
 
         if (viewId === 'dashboard') this.renderDashboard();
-        else if (viewId === 'compras-nueva') this.resetPurchaseForm();
-        else if (viewId === 'ordenes-compra') this.renderOCHistoryTable();
-        else if (viewId === 'proveedores') this.renderSuppliersView();
-        else if (viewId === 'inventarios') this.renderInventorySheets();
-        else if (viewId === 'cmv') this.renderCMVView();
         else if (viewId === 'productos') this.renderProductsTable();
-        else if (viewId === 'compras-historial') this.renderPurchasesTable();
-        else if (viewId === 'evolucion-compras') this.renderEvolucionProveedor();
-        else if (viewId === 'ajustes') this.renderUsersTable();
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
     },
@@ -229,114 +187,73 @@ window.App = {
         setTimeout(() => toast.remove(), 3000);
     },
 
-    // ==========================================
-    // CONTROLADORES DE TECLADO Y EVENTOS FORMULARIO
-    // ==========================================
-    handlePurchaseFormKeydown: function(event) {
-        if (event.key === 'Enter') {
-            if (event.target.tagName === 'TEXTAREA') return;
-            if (event.target.type === 'submit' || event.target.id === 'purchaseSubmitBtn' || event.target.closest('#purchaseSubmitBtn')) return;
-            event.preventDefault();
-            this.addPurchaseRow();
-        }
-    },
-    handlePurchaseHeaderKeydown: function(event) {
-        this.handlePurchaseFormKeydown(event);
-    },
-    handlePurchaseRowKeydown: function(event) {
-        this.handlePurchaseFormKeydown(event);
-    },
-    handlePurchaseDateChange: function(val) {},
-    handlePurchaseSupplierChange: function(val) {},
-    handlePurchasePaymentStatusChange: function(val) {},
-    recalculateTaxesFromRate: function() {},
-    recalculateTotalInvoiceFromInputs: function() {},
-    recalculateIibbFromRate: function() {},
-    updatePurchaseRowProduct: function(el) {},
-    updateRowDiscountPct: function(el) {},
-    updateRowDiscountVal: function(el) {},
-    calculatePurchaseTotals: function() {},
-    cancelPurchaseEdit: function() { this.resetPurchaseForm(); },
-    editPurchaseFromDetail: function() {},
-    closePurchaseDetailModal: function() { document.getElementById('purchaseDetailModal')?.classList.add('hidden'); },
-
-    // ==========================================
-    // RENDERIZADO Y TABLAS
-    // ==========================================
     renderDashboard: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const products = StorageManager.getProducts();
-        let totalStockValuation = 0;
-        products.forEach(p => {
-            totalStockValuation += (p.currentStock || 0) * (p.costPrice || 0);
-        });
+        // Dashboard
+    },
 
-        const dashStockValEl = document.getElementById('dashTotalStockValue');
-        if (dashStockValEl) dashStockValEl.textContent = `$ ${totalStockValuation.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+    // ==========================================
+    // MÓDULO INSUMOS (ABRIR / GUARDAR / TABLA)
+    // ==========================================
+    openProductModal: async function(productId) {
+        const form = document.getElementById('productForm');
+        if (form) form.reset();
+        
+        document.getElementById('prodFormId').value = productId || '';
+        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo / Mercadería';
 
-        const lowStockProducts = products.filter(p => (p.currentStock || 0) <= (p.minStock || 0));
-        const lowTable = document.getElementById('dashLowStockTable');
-        if (lowTable) {
-            if (lowStockProducts.length === 0) {
-                lowTable.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-400">¡Excelente! No hay insumos en stock crítico.</td></tr>`;
-            } else {
-                lowTable.innerHTML = lowStockProducts.slice(0, 5).map(p => `
-                    <tr class="table-row-hover text-xs">
-                        <td class="py-2.5 px-4 font-medium text-slate-800">${p.name}</td>
-                        <td class="py-2.5 px-3 text-slate-600">${p.supplierName || 'Sin asignar'}</td>
-                        <td class="py-2.5 px-3 font-black text-amber-600">${p.currentStock} ${p.unit}</td>
-                        <td class="py-2.5 px-3 text-right">
-                            <button onclick="App.navigate('productos')" class="text-[11px] font-bold text-sky-600">Ver</button>
-                        </td>
-                    </tr>
-                `).join('');
+        await this.populateDropdowns();
+
+        if (productId) {
+            const products = await ProductManager.getProducts();
+            const p = products.find(item => item.id === productId);
+            if (p) {
+                document.getElementById('prodFormCode').value = p.code || '';
+                document.getElementById('prodFormName').value = p.name || '';
+                document.getElementById('prodFormCategorySelect').value = p.category || '';
+                document.getElementById('prodFormUnit').value = p.unit || 'kg';
+                document.getElementById('prodFormStock').value = p.currentStock || 0;
+                document.getElementById('prodFormMinStock').value = p.minStock || 10;
+                document.getElementById('prodFormCost').value = p.costPrice || 0;
+                document.getElementById('prodFormSale').value = p.salePrice || 0;
             }
         }
+
+        document.getElementById('productModal')?.classList.remove('hidden');
     },
 
-    resetPurchaseForm: function() {
-        const form = document.getElementById('purchaseForm');
-        if (form) form.reset();
-        const tbody = document.getElementById('purchaseItemsTableBody');
-        if (tbody) {
-            tbody.innerHTML = '';
-            this.addPurchaseRow();
+    closeProductModal: function() {
+        document.getElementById('productModal')?.classList.add('hidden');
+    },
+
+    handleSaveProduct: async function(event) {
+        event.preventDefault();
+        try {
+            const nameInput = document.getElementById('prodFormName');
+            if (!nameInput || !nameInput.value.trim()) {
+                alert("Por favor ingresa un nombre para el insumo.");
+                return;
+            }
+
+            const formData = {
+                id: document.getElementById('prodFormId').value || undefined,
+                code: document.getElementById('prodFormCode').value.trim(),
+                name: nameInput.value.trim(),
+                category: document.getElementById('prodFormCategorySelect').value,
+                unit: document.getElementById('prodFormUnit').value,
+                currentStock: document.getElementById('prodFormStock').value,
+                minStock: document.getElementById('prodFormMinStock').value,
+                costPrice: document.getElementById('prodFormCost').value,
+                salePrice: document.getElementById('prodFormSale').value
+            };
+
+            await ProductManager.saveProduct(formData);
+            this.closeProductModal();
+            this.showToast('¡Insumo guardado con éxito en Supabase!', 'success');
+            await this.renderProductsTable();
+        } catch (e) {
+            alert(e.message || "Error al guardar insumo");
+            console.error(e);
         }
-    },
-
-    addPurchaseRow: function(defaultProductId, defaultQty, defaultCost) {
-        if (defaultProductId === undefined) defaultProductId = '';
-        if (defaultQty === undefined) defaultQty = 1;
-        if (defaultCost === undefined) defaultCost = 0;
-
-        const tbody = document.getElementById('purchaseItemsTableBody');
-        if (!tbody) return;
-        const products = typeof StorageManager !== 'undefined' ? StorageManager.getProducts() : [];
-
-        const row = document.createElement('tr');
-        row.className = 'purchase-item-row';
-        row.innerHTML = `
-            <td class="py-2 px-2.5">
-                <select required class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">
-                    <option value="">-- Seleccionar Insumo --</option>
-                    ${products.map(p => `<option value="${p.id}" ${p.id === defaultProductId ? 'selected' : ''}>${p.name}</option>`).join('')}
-                </select>
-            </td>
-            <td class="py-2 px-2 text-center text-slate-500 font-bold">u.</td>
-            <td class="py-2 px-2"><input type="number" step="any" value="${defaultQty}" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs"></td>
-            <td class="py-2 px-2"><input type="number" step="any" value="${defaultCost}" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs"></td>
-            <td class="py-2 px-2"><input type="number" step="any" placeholder="0" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs"></td>
-            <td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>
-            <td class="py-2 px-2 text-center">
-                <button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>
-            </td>
-        `;
-        tbody.appendChild(row);
-    },
-
-    removePurchaseRow: function(btn) {
-        const row = btn.closest('tr');
-        if (row) row.remove();
     },
 
     renderProductsTable: async function() {
@@ -369,34 +286,11 @@ window.App = {
                 <td class="py-2.5 px-3 text-right font-bold">${curr} ${(p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
                 <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
                 <td class="py-2.5 px-3 text-right">
+                    <button onclick="App.openProductModal('${p.id}')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
                     <button onclick="App.deleteProductFromDb('${p.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
                 </td>
             </tr>
         `).join('');
-    },
-
-    handleSaveProduct: async function(event) {
-        event.preventDefault();
-        try {
-            const formData = {
-                id: document.getElementById('prodFormId').value || undefined,
-                code: document.getElementById('prodFormCode').value,
-                name: document.getElementById('prodFormName').value,
-                category: document.getElementById('prodFormCategorySelect').value,
-                unit: document.getElementById('prodFormUnit').value,
-                currentStock: document.getElementById('prodFormStock').value,
-                minStock: document.getElementById('prodFormMinStock').value,
-                costPrice: document.getElementById('prodFormCost').value,
-                salePrice: document.getElementById('prodFormSale').value
-            };
-
-            await ProductManager.saveProduct(formData);
-            this.closeProductModal();
-            this.showToast('Insumo guardado en Supabase', 'success');
-            await this.renderProductsTable();
-        } catch (e) {
-            alert(e.message);
-        }
     },
 
     deleteProductFromDb: async function(id) {
@@ -410,43 +304,18 @@ window.App = {
         }
     },
 
-    renderSuppliersView: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const suppliers = StorageManager.getSuppliers();
-        const tbody = document.getElementById('suppliersTableBody');
-        if (!tbody) return;
-        if (suppliers.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores registrados.</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = suppliers.map(s => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-3 px-4 font-bold text-slate-900">${s.name}</td>
-                <td class="py-3 px-3 font-mono">${s.cuit || '-'}</td>
-                <td class="py-3 px-3">${s.contactPerson || '-'}</td>
-                <td class="py-3 px-3">${s.phone || '-'}</td>
-                <td class="py-3 px-3">${s.email || '-'}</td>
-                <td class="py-3 px-3">${s.paymentMethods || 'A convenir'}</td>
-                <td class="py-3 px-2 text-center">0</td>
-                <td class="py-3 px-4 text-right">
-                    <button onclick="App.openSupplierModal('${s.id}')" class="p-1 text-slate-500 hover:text-teal-600"><i class="fa-solid fa-pen-to-square"></i></button>
-                </td>
-            </tr>
-        `).join('');
-    },
-
+    // Handlers secundarios de formulario
+    handlePurchaseFormKeydown: function(e) {},
+    handlePurchaseHeaderKeydown: function(e) {},
+    handlePurchaseRowKeydown: function(e) {},
+    resetPurchaseForm: function() {},
+    renderSuppliersView: function() {},
     renderPurchasesTable: function() {},
     renderOCHistoryTable: function() {},
     renderInventorySheets: function() {},
     renderCMVView: function() {},
     renderEvolucionProveedor: function() {},
     renderUsersTable: function() {},
-
-    // ==========================================
-    // MODALES Y MANTENIMIENTO
-    // ==========================================
-    openProductModal: function(id) { document.getElementById('productModal')?.classList.remove('hidden'); },
-    closeProductModal: function() { document.getElementById('productModal')?.classList.add('hidden'); },
     openSupplierModal: function(id) { document.getElementById('supplierModal')?.classList.remove('hidden'); },
     closeSupplierModal: function() { document.getElementById('supplierModal')?.classList.add('hidden'); },
     openUserModal: function(id) { document.getElementById('userModal')?.classList.remove('hidden'); },
@@ -458,64 +327,7 @@ window.App = {
     openPaymentModal: function() { document.getElementById('paymentModal')?.classList.remove('hidden'); },
     closePaymentModal: function() { document.getElementById('paymentModal')?.classList.add('hidden'); },
     openImportModal: function() { document.getElementById('importModal')?.classList.remove('hidden'); },
-    closeImportModal: function() { document.getElementById('importModal')?.classList.add('hidden'); },
-    handleSaveSupplier: function(e) { e.preventDefault(); this.closeSupplierModal(); },
-    handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
-    handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
-    handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
-    handleSavePurchase: function(e) { e.preventDefault(); this.navigate('compras-historial'); },
-    saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
-
-    setInventorySubTab: function(tab) {
-        this.inventorySubTab = tab;
-        const contIni = document.getElementById('subtab-content-inicial');
-        const contFin = document.getElementById('subtab-content-final');
-        const contSnap = document.getElementById('subtab-content-snapshots');
-        if (contIni) contIni.classList.toggle('hidden', tab !== 'inicial');
-        if (contFin) contFin.classList.toggle('hidden', tab !== 'final');
-        if (contSnap) contSnap.classList.toggle('hidden', tab !== 'snapshots');
-        this.renderInventorySheets();
-    },
-
-    switchEvolucionTab: function(tab) {
-        this.evolucionTab = tab;
-        const subProv = document.getElementById('subtabEvolProveedor');
-        const subIns = document.getElementById('subtabEvolInsumo');
-        if (subProv) subProv.classList.toggle('hidden', tab !== 'proveedor');
-        if (subIns) subIns.classList.toggle('hidden', tab !== 'insumo');
-        if (tab === 'proveedor') this.renderEvolucionProveedor();
-    },
-
-    changePeriod: function(delta) {
-        if (!this.activePeriod) return;
-        const parts = this.activePeriod.split('-');
-        let y = parseInt(parts[0], 10);
-        let m = parseInt(parts[1], 10) + delta;
-        if (m > 12) { m = 1; y += 1; }
-        if (m < 1) { m = 12; y -= 1; }
-        this.activePeriod = `${y}-${String(m).padStart(2, '0')}`;
-        const cmvInp = document.getElementById('cmvPeriodInput');
-        if (cmvInp) cmvInp.value = this.activePeriod;
-        const invInp = document.getElementById('invPeriodInput');
-        if (invInp) invInp.value = this.activePeriod;
-        if (this.currentView === 'inventarios') this.renderInventorySheets();
-        if (this.currentView === 'cmv') this.renderCMVView();
-    },
-
-    handlePeriodChange: function(val) {
-        if (!val) return;
-        this.activePeriod = val;
-        if (this.currentView === 'inventarios') this.renderInventorySheets();
-        if (this.currentView === 'cmv') this.renderCMVView();
-    },
-
-    loadDemoData: function() {
-        if (typeof StorageManager !== 'undefined') {
-            StorageManager.loadDemoData();
-            this.init();
-            this.showToast('Datos de prueba cargados con éxito');
-        }
-    }
+    closeImportModal: function() { document.getElementById('importModal')?.classList.add('hidden'); }
 };
 
 window.App = window.App;
@@ -555,38 +367,48 @@ async function cargarLocalesDelUsuario() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) return [];
 
-  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
-  const rolActual = perfil ? perfil.rol : 'MANAGER';
   let localesDisponibles = [];
 
+  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
+  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
+
   if (rolActual === 'SUPERADMIN') {
-    const { data } = await db.from('Locales').select('*');
+    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
     localesDisponibles = data || [];
   } else {
     const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
     localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
   }
 
+  // Fallback si no hay relaciones específicas creadas aún
+  if (localesDisponibles.length === 0) {
+    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = todosLocales || [];
+  }
+
   const selector = document.getElementById('selectorLocales');
   if (selector) {
     if (localesDisponibles.length === 0) {
-      selector.innerHTML = '<option value="">No tienes locales asignados</option>';
+      selector.innerHTML = '<option value="">No hay locales creados en BD</option>';
     } else {
       selector.innerHTML = localesDisponibles.map(local => `<option value="${local.id}">${local.nombre_local}</option>`).join('');
       selector.value = localesDisponibles[0].id;
     }
 
-    selector.onchange = () => {
-      if (window.App && window.App.currentView === 'productos') {
-        window.App.renderProductsTable();
+    selector.onchange = async () => {
+      if (window.App) {
+        await window.App.populateDropdowns();
+        if (window.App.currentView === 'productos') {
+          await window.App.renderProductsTable();
+        }
       }
     };
   }
 
   if (window.App) {
-    window.App.populateDropdowns();
+    await window.App.populateDropdowns();
     if (window.App.currentView === 'productos') {
-      window.App.renderProductsTable();
+      await window.App.renderProductsTable();
     }
   }
 
@@ -614,84 +436,3 @@ if (db && db.auth) {
     }
   });
 }
-// Renderizar lista de Insumos
-App.renderProductsTable = async function() {
-  const tbody = document.getElementById('productsTableBody');
-  if (!tbody) return;
-
-  tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>`;
-
-  const products = await ProductManager.getProducts();
-
-  if (products.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos creados para este local.</td></tr>`;
-    return;
-  }
-
-  const curr = '$';
-  tbody.innerHTML = products.map(p => `
-    <tr class="table-row-hover text-xs">
-      <td class="py-2.5 px-3 font-mono font-bold">${p.code || '-'}</td>
-      <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
-      <td class="py-2.5 px-3 text-slate-500">${p.category || '-'}</td>
-      <td class="py-2.5 px-3">Principal</td>
-      <td class="py-2.5 px-2 text-center font-medium">${p.unit || 'u.'}</td>
-      <td class="py-2.5 px-3 text-right font-black">${p.currentStock}</td>
-      <td class="py-2.5 px-3 text-right text-slate-400">${p.minStock}</td>
-      <td class="py-2.5 px-3 text-right">${curr} ${p.costPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-      <td class="py-2.5 px-3 text-right font-bold">${curr} ${(p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-      <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
-      <td class="py-2.5 px-3 text-right">
-        <button onclick="App.deleteProductFromDb('${p.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
-      </td>
-    </tr>
-  `).join('');
-};
-
-// Guardar Insumo desde el Modal
-App.handleSaveProduct = async function(event) {
-  event.preventDefault();
-  try {
-    const formData = {
-      id: document.getElementById('prodFormId').value || undefined,
-      code: document.getElementById('prodFormCode').value,
-      name: document.getElementById('prodFormName').value,
-      category: document.getElementById('prodFormCategorySelect').value,
-      unit: document.getElementById('prodFormUnit').value,
-      currentStock: document.getElementById('prodFormStock').value,
-      minStock: document.getElementById('prodFormMinStock').value,
-      costPrice: document.getElementById('prodFormCost').value,
-      salePrice: document.getElementById('prodFormSale').value
-    };
-
-    await ProductManager.saveProduct(formData);
-    this.closeProductModal();
-    this.showToast('Insumo guardado en Supabase', 'success');
-    await this.renderProductsTable();
-  } catch (e) {
-    alert(e.message);
-  }
-};
-
-// Eliminar Insumo
-App.deleteProductFromDb = async function(id) {
-  if (!confirm('¿Deseas eliminar este insumo de Supabase?')) return;
-  try {
-    await ProductManager.deleteProduct(id);
-    this.showToast('Insumo eliminado', 'info');
-    await this.renderProductsTable();
-  } catch (e) {
-    alert(e.message);
-  }
-};
-
-// Cargar opciones del selector de Categorías
-App.populateDropdowns = async function() {
-  const categories = await ProductManager.getCategories();
-  const prodCatSelect = document.getElementById('prodFormCategorySelect');
-  if (prodCatSelect) {
-    prodCatSelect.innerHTML = categories.length > 0 
-      ? categories.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join('')
-      : '<option value="Materia Prima">Materia Prima</option>';
-  }
-};
