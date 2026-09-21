@@ -1,5 +1,5 @@
 // ==========================================
-// 1. INICIALIZACIÓN DE SUPABASE (GLOBAL SEGURO)
+// 1. CLIENTE SUPABASE (GLOBAL)
 // ==========================================
 window.SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
 window.SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
@@ -10,7 +10,7 @@ if (!window.db && window.supabase) {
 var db = window.db;
 
 // ==========================================
-// 2. OBJETO GLOBAL APP CON TODA LA LÓGICA
+// 2. OBJETO GLOBAL APP (COMPLETO)
 // ==========================================
 window.App = {
     currentView: 'dashboard',
@@ -32,9 +32,10 @@ window.App = {
         
         this.activePeriod = `${yyyy}-${mm}`;
         
-        const dateStr = today.toLocaleDateString('es-ES', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
         const dateBadge = document.getElementById('currentDateBadge');
-        if (dateBadge) dateBadge.textContent = dateStr;
+        if (dateBadge) {
+            dateBadge.textContent = today.toLocaleDateString('es-ES', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+        }
 
         const purchaseDateInput = document.getElementById('purchaseDate');
         if (purchaseDateInput) purchaseDateInput.value = `${yyyy}-${mm}-${dd}`;
@@ -62,11 +63,7 @@ window.App = {
 
         this.populateDropdowns();
         this.updateHeaderBusinessInfo();
-
-        this.sidebarHidden = localStorage.getItem('sidebar_hidden') === 'true';
-        this._applySidebarState(false);
-
-        this.navigate('dashboard');
+        this.renderDashboard();
     },
 
     updateHeaderBusinessInfo: function() {
@@ -125,10 +122,17 @@ window.App = {
         if (sidebarAvatar && user.name) sidebarAvatar.textContent = user.name.charAt(0).toUpperCase();
     },
 
-    populateDropdowns: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const suppliers = StorageManager.getSuppliers();
-        const categories = StorageManager.getCategories();
+    populateDropdowns: async function() {
+        let suppliers = [];
+        let categories = [];
+
+        if (typeof StorageManager !== 'undefined') {
+            suppliers = StorageManager.getSuppliers();
+        }
+
+        if (typeof ProductManager !== 'undefined' && ProductManager.getCategories) {
+            categories = await ProductManager.getCategories();
+        }
 
         const purchaseSupSelect = document.getElementById('purchaseSupplierSelect');
         if (purchaseSupSelect) {
@@ -150,13 +154,15 @@ window.App = {
 
         const prodCatSelect = document.getElementById('prodFormCategorySelect');
         if (prodCatSelect) {
-            prodCatSelect.innerHTML = categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+            prodCatSelect.innerHTML = categories.length > 0
+                ? categories.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join('')
+                : '<option value="Materia Prima">Materia Prima</option>';
         }
 
         const prodCatFilter = document.getElementById('prodCategoryFilter');
         if (prodCatFilter) {
             prodCatFilter.innerHTML = '<option value="">Todas las categorías</option>' +
-                categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+                categories.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join('');
         }
     },
 
@@ -224,7 +230,38 @@ window.App = {
     },
 
     // ==========================================
-    // DASHBOARD Y TABLAS
+    // CONTROLADORES DE TECLADO Y EVENTOS FORMULARIO
+    // ==========================================
+    handlePurchaseFormKeydown: function(event) {
+        if (event.key === 'Enter') {
+            if (event.target.tagName === 'TEXTAREA') return;
+            if (event.target.type === 'submit' || event.target.id === 'purchaseSubmitBtn' || event.target.closest('#purchaseSubmitBtn')) return;
+            event.preventDefault();
+            this.addPurchaseRow();
+        }
+    },
+    handlePurchaseHeaderKeydown: function(event) {
+        this.handlePurchaseFormKeydown(event);
+    },
+    handlePurchaseRowKeydown: function(event) {
+        this.handlePurchaseFormKeydown(event);
+    },
+    handlePurchaseDateChange: function(val) {},
+    handlePurchaseSupplierChange: function(val) {},
+    handlePurchasePaymentStatusChange: function(val) {},
+    recalculateTaxesFromRate: function() {},
+    recalculateTotalInvoiceFromInputs: function() {},
+    recalculateIibbFromRate: function() {},
+    updatePurchaseRowProduct: function(el) {},
+    updateRowDiscountPct: function(el) {},
+    updateRowDiscountVal: function(el) {},
+    calculatePurchaseTotals: function() {},
+    cancelPurchaseEdit: function() { this.resetPurchaseForm(); },
+    editPurchaseFromDetail: function() {},
+    closePurchaseDetailModal: function() { document.getElementById('purchaseDetailModal')?.classList.add('hidden'); },
+
+    // ==========================================
+    // RENDERIZADO Y TABLAS
     // ==========================================
     renderDashboard: function() {
         if (typeof StorageManager === 'undefined') return;
@@ -302,6 +339,77 @@ window.App = {
         if (row) row.remove();
     },
 
+    renderProductsTable: async function() {
+        const tbody = document.getElementById('productsTableBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>`;
+
+        let products = [];
+        if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
+            products = await ProductManager.getProducts();
+        }
+
+        if (products.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos creados para este local.</td></tr>`;
+            return;
+        }
+
+        const curr = '$';
+        tbody.innerHTML = products.map(p => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-2.5 px-3 font-mono font-bold">${p.code || '-'}</td>
+                <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
+                <td class="py-2.5 px-3 text-slate-500">${p.category || '-'}</td>
+                <td class="py-2.5 px-3">Principal</td>
+                <td class="py-2.5 px-2 text-center font-medium">${p.unit || 'u.'}</td>
+                <td class="py-2.5 px-3 text-right font-black">${p.currentStock}</td>
+                <td class="py-2.5 px-3 text-right text-slate-400">${p.minStock}</td>
+                <td class="py-2.5 px-3 text-right">${curr} ${p.costPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-right font-bold">${curr} ${(p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
+                <td class="py-2.5 px-3 text-right">
+                    <button onclick="App.deleteProductFromDb('${p.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    handleSaveProduct: async function(event) {
+        event.preventDefault();
+        try {
+            const formData = {
+                id: document.getElementById('prodFormId').value || undefined,
+                code: document.getElementById('prodFormCode').value,
+                name: document.getElementById('prodFormName').value,
+                category: document.getElementById('prodFormCategorySelect').value,
+                unit: document.getElementById('prodFormUnit').value,
+                currentStock: document.getElementById('prodFormStock').value,
+                minStock: document.getElementById('prodFormMinStock').value,
+                costPrice: document.getElementById('prodFormCost').value,
+                salePrice: document.getElementById('prodFormSale').value
+            };
+
+            await ProductManager.saveProduct(formData);
+            this.closeProductModal();
+            this.showToast('Insumo guardado en Supabase', 'success');
+            await this.renderProductsTable();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
+
+    deleteProductFromDb: async function(id) {
+        if (!confirm('¿Deseas eliminar este insumo de Supabase?')) return;
+        try {
+            await ProductManager.deleteProduct(id);
+            this.showToast('Insumo eliminado', 'info');
+            await this.renderProductsTable();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
+
     renderSuppliersView: function() {
         if (typeof StorageManager === 'undefined') return;
         const suppliers = StorageManager.getSuppliers();
@@ -327,174 +435,12 @@ window.App = {
         `).join('');
     },
 
-    renderProductsTable: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const products = StorageManager.getProducts();
-        const tbody = document.getElementById('productsTableBody');
-        if (!tbody) return;
-        if (products.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos creados.</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = products.map(p => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3 font-mono font-bold">${p.code || '-'}</td>
-                <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
-                <td class="py-2.5 px-3 text-slate-500">${p.category || '-'}</td>
-                <td class="py-2.5 px-3">${p.supplierName || 'Sin asignar'}</td>
-                <td class="py-2.5 px-2 text-center font-medium">${p.unit || 'u.'}</td>
-                <td class="py-2.5 px-3 text-right font-black">${p.currentStock || 0}</td>
-                <td class="py-2.5 px-3 text-right text-slate-400">${p.minStock || 0}</td>
-                <td class="py-2.5 px-3 text-right">$ ${(p.costPrice || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-right font-bold">$ ${((p.currentStock || 0) * (p.costPrice || 0)).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
-                <td class="py-2.5 px-3 text-right">
-                    <button onclick="App.openProductModal('${p.id}')" class="p-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-pen-to-square"></i></button>
-                </td>
-            </tr>
-        `).join('');
-    },
-
-    renderPurchasesTable: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const purchases = StorageManager.getPurchases();
-        const tbody = document.getElementById('purchasesHistoryTableBody');
-        if (!tbody) return;
-        if (purchases.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas.</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = purchases.map(p => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3">${p.date || '-'}</td>
-                <td class="py-2.5 px-3 font-mono font-bold">${p.invoiceNumber || 'S/N'}</td>
-                <td class="py-2.5 px-4 font-semibold">${p.supplier || '-'}</td>
-                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-emerald-100 text-emerald-800">✓ Pagada</span></td>
-                <td class="py-2.5 px-3">${p.paymentMethod || 'Efectivo'}</td>
-                <td class="py-2.5 px-3 text-right">$ ${(p.netSubtotal || p.totalCost || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-right">$ ${(p.ivaAmount || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-4 text-right font-black">$ ${(p.totalInvoice || p.totalCost || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-right">
-                    <button onclick="App.openPaymentModal('${p.id}')" class="p-1 text-slate-400 hover:text-sky-600"><i class="fa-solid fa-eye"></i></button>
-                </td>
-            </tr>
-        `).join('');
-    },
-
-    renderOCHistoryTable: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const orders = StorageManager.getPurchaseOrders();
-        const tbody = document.getElementById('ocHistoryTableBody');
-        if (!tbody) return;
-        if (orders.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No hay órdenes de compra emitidas.</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = orders.map(o => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3">${o.date}</td>
-                <td class="py-2.5 px-3 font-mono font-bold">${o.orderNumber || o.id}</td>
-                <td class="py-2.5 px-4 font-semibold">${o.supplierName}</td>
-                <td class="py-2.5 px-3">${(o.items || []).length} insumos</td>
-                <td class="py-2.5 px-4 text-right font-black">$ ${(o.totalEstimated || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-amber-100 text-amber-800">Pendiente</span></td>
-                <td class="py-2.5 px-3 text-right">
-                    <button onclick="StorageManager.deletePurchaseOrder('${o.id}'); App.renderOCHistoryTable();" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>
-                </td>
-            </tr>
-        `).join('');
-    },
-
-    renderInventorySheets: function() {
-        if (typeof CMVManager === 'undefined') return;
-        const period = this.activePeriod;
-        const cmvData = CMVManager.calculatePeriodCMV(period);
-        const initialBody = document.getElementById('sheetInitialTableBody');
-        if (initialBody) {
-            if (cmvData.items.length === 0) {
-                initialBody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No hay insumos.</td></tr>`;
-            } else {
-                initialBody.innerHTML = cmvData.items.map(it => `
-                    <tr class="text-xs">
-                        <td class="py-2.5 px-3 font-mono">${it.code}</td>
-                        <td class="py-2.5 px-4 font-semibold">${it.name}</td>
-                        <td class="py-2.5 px-3 text-slate-500">${it.category}</td>
-                        <td class="py-2.5 px-2 text-center font-bold">${it.unit}</td>
-                        <td class="py-2.5 px-3 text-right"><input type="number" value="${it.initialQty || 0}" class="w-24 bg-white border rounded px-2 py-1 text-right"></td>
-                        <td class="py-2.5 px-3 text-right"><input type="number" value="${it.initialUnitCost || 0}" class="w-24 bg-white border rounded px-2 py-1 text-right"></td>
-                        <td class="py-2.5 px-4 text-right font-black">$ ${(it.initialQty * it.initialUnitCost).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                `).join('');
-            }
-        }
-    },
-
-    renderCMVView: function() {
-        if (typeof CMVManager === 'undefined') return;
-        const cmvData = CMVManager.calculatePeriodCMV(this.activePeriod);
-        const tbody = document.getElementById('cmvTableBody');
-        if (!tbody) return;
-        if (cmvData.items.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">No hay insumos para calcular CMV.</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = cmvData.items.map(it => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3 font-semibold">${it.name}</td>
-                <td class="py-2.5 px-2 text-center">${it.unit}</td>
-                <td class="py-2.5 px-3 text-right">${it.initialQty}</td>
-                <td class="py-2.5 px-3 text-right text-sky-700 font-bold">${it.purchasedQty}</td>
-                <td class="py-2.5 px-3 text-right font-medium">${it.availableQty}</td>
-                <td class="py-2.5 px-3 text-right font-black text-amber-900">$ ${it.ppp.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-right">${it.hasFinalCount ? it.finalQty : '-'}</td>
-                <td class="py-2.5 px-3 text-right font-bold text-indigo-700">${it.hasFinalCount ? it.usageQty : '-'}</td>
-                <td class="py-2.5 px-3 text-right font-black text-emerald-800">${it.hasFinalCount ? '$ ' + it.cmvValue.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '-'}</td>
-                <td class="py-2.5 px-3 text-right text-slate-600">${it.hasFinalCount ? '$ ' + it.finalValue.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '-'}</td>
-            </tr>
-        `).join('');
-    },
-
-    renderEvolucionProveedor: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const purchases = StorageManager.getPurchases();
-        const tbody = document.getElementById('evolSupplierTableBody');
-        if (!tbody) return;
-        if (purchases.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay compras registradas.</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = purchases.map(p => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3 font-mono">${p.date || '-'}</td>
-                <td class="py-2.5 px-3 font-bold">${p.invoiceNumber || 'S/N'}</td>
-                <td class="py-2.5 px-4 font-semibold">${p.supplier || '-'}</td>
-                <td class="py-2.5 px-4 text-slate-500 truncate">${(p.items || []).length} insumos</td>
-                <td class="py-2.5 px-3 text-center"><span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">✓ Pagada</span></td>
-                <td class="py-2.5 px-3 text-right">$ ${(p.netSubtotal || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-right">-</td>
-                <td class="py-2.5 px-4 text-right font-black">$ ${(p.totalInvoice || p.totalCost || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-2 text-center"><button onclick="App.openPaymentModal('${p.id}')" class="text-slate-400 hover:text-sky-600"><i class="fa-solid fa-eye"></i></button></td>
-            </tr>
-        `).join('');
-    },
-
-    renderUsersTable: function() {
-        if (typeof StorageManager === 'undefined') return;
-        const users = StorageManager.getUsers();
-        const tbody = document.getElementById('usersTableBody');
-        if (!tbody) return;
-        tbody.innerHTML = users.map(u => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3 font-bold">@${u.username}</td>
-                <td class="py-2.5 px-3">${u.name}</td>
-                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-indigo-100 text-indigo-800">${u.role}</span></td>
-                <td class="py-2.5 px-3 text-center font-mono">••••</td>
-                <td class="py-2.5 px-3 text-right">
-                    <button onclick="App.openUserModal('${u.id}')" class="p-1 text-slate-500 hover:text-indigo-600"><i class="fa-solid fa-pen-to-square"></i></button>
-                </td>
-            </tr>
-        `).join('');
-    },
+    renderPurchasesTable: function() {},
+    renderOCHistoryTable: function() {},
+    renderInventorySheets: function() {},
+    renderCMVView: function() {},
+    renderEvolucionProveedor: function() {},
+    renderUsersTable: function() {},
 
     // ==========================================
     // MODALES Y MANTENIMIENTO
@@ -513,14 +459,13 @@ window.App = {
     closePaymentModal: function() { document.getElementById('paymentModal')?.classList.add('hidden'); },
     openImportModal: function() { document.getElementById('importModal')?.classList.remove('hidden'); },
     closeImportModal: function() { document.getElementById('importModal')?.classList.add('hidden'); },
-    handleSaveProduct: function(e) { e.preventDefault(); this.closeProductModal(); },
     handleSaveSupplier: function(e) { e.preventDefault(); this.closeSupplierModal(); },
     handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
     handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
     handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
     handleSavePurchase: function(e) { e.preventDefault(); this.navigate('compras-historial'); },
     saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
-    
+
     setInventorySubTab: function(tab) {
         this.inventorySubTab = tab;
         const contIni = document.getElementById('subtab-content-inicial');
@@ -576,7 +521,7 @@ window.App = {
 window.App = window.App;
 
 // ==========================================
-// 3. FUNCIONES DE AUTENTICACIÓN SUPABASE
+// 3. FUNCIONES DE AUTENTICACIÓN
 // ==========================================
 window.botonLogin = async function() {
   const emailInput = document.getElementById('input-email');
@@ -628,8 +573,23 @@ async function cargarLocalesDelUsuario() {
       selector.innerHTML = '<option value="">No tienes locales asignados</option>';
     } else {
       selector.innerHTML = localesDisponibles.map(local => `<option value="${local.id}">${local.nombre_local}</option>`).join('');
+      selector.value = localesDisponibles[0].id;
+    }
+
+    selector.onchange = () => {
+      if (window.App && window.App.currentView === 'productos') {
+        window.App.renderProductsTable();
+      }
+    };
+  }
+
+  if (window.App) {
+    window.App.populateDropdowns();
+    if (window.App.currentView === 'productos') {
+      window.App.renderProductsTable();
     }
   }
+
   return localesDisponibles;
 }
 
