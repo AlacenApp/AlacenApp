@@ -4350,3 +4350,52 @@ const App = {
 window.addEventListener('DOMContentLoaded', () => {
     App.init();
 });
+// ==========================================
+// OBTENER LOCALES SEGÚN EL ROL DEL USUARIO
+// ==========================================
+
+async function cargarLocalesDelUsuario() {
+  // 1. Obtener el usuario que está navegando
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    console.log("No hay ningún usuario autenticado.");
+    return;
+  }
+
+  // 2. Consultar el rol en la tabla Perfiles
+  const { data: perfil, error: errorPerfil } = await supabase
+    .from('Perfiles')
+    .select('rol')
+    .eq('id', user.id)
+    .single();
+
+  if (errorPerfil) {
+    console.error("Error al obtener el perfil:", errorPerfil.message);
+    return;
+  }
+
+  let localesDisponibles = [];
+
+  // 3. Aplicar lógica RBAC
+  if (perfil.rol === 'SUPERADMIN') {
+    // Si es Creador / SuperAdmin, trae TODOS los locales
+    const { data, error } = await supabase.from('Locales').select('*');
+    if (error) console.error(error);
+    localesDisponibles = data;
+  } else {
+    // Si es Manager / Encargado, trae solo los locales que tiene vinculados
+    const { data, error } = await supabase
+      .from('Usuarios_Locales')
+      .select('local_id, Locales(*)')
+      .eq('perfil_id', user.id);
+
+    if (error) console.error(error);
+    localesDisponibles = data ? data.map(item => item.Locales) : [];
+  }
+
+  console.log(`Rol detectado: ${perfil.rol}`);
+  console.log("Locales a los que tiene acceso:", localesDisponibles);
+
+  alert(`Bienvenido. Rol: ${perfil.rol}\nTienes acceso a ${localesDisponibles.length} local(es).`);
+  return localesDisponibles;
+}
