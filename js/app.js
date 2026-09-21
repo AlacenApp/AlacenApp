@@ -90,7 +90,18 @@ async function cargarLocalesDelUsuario() {
   console.log(`Rol detectado: ${perfil.rol}`);
   console.log("Locales a los que tiene acceso:", localesDisponibles);
 
-  alert(`Bienvenido. Rol: ${perfil.rol}\nTienes acceso a ${localesDisponibles.length} local(es).`);
+  // Llenar el <select> en el HTML con los locales obtenidos
+  const selector = document.getElementById('selectorLocales');
+  if (selector) {
+    if (localesDisponibles.length === 0) {
+      selector.innerHTML = '<option value="">No tienes locales asignados</option>';
+    } else {
+      selector.innerHTML = localesDisponibles.map(local => 
+        `<option value="${local.id}">${local.nombre_local}</option>`
+      ).join('');
+    }
+  }
+
   return localesDisponibles;
 }
 const App = {
