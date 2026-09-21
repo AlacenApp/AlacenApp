@@ -1028,10 +1028,57 @@ const App = {
             // Si está directamente enfocado en el botón de guardar, permitir el submit
             if (event.target.type === 'submit' || event.target.id === 'purchaseSubmitBtn' || event.target.closest('#purchaseSubmitBtn')) return;
 
+            // Si está en el selector de insumo (.row-product-select), abrir el listado de insumos al presionar ENTER
+            if (event.target.classList.contains('row-product-select')) {
+                event.preventDefault();
+                event.stopPropagation();
+                try {
+                    if (typeof event.target.showPicker === 'function') {
+                        event.target.showPicker();
+                        return;
+                    }
+                } catch (e) {
+                    console.warn(e);
+                }
+                return;
+            }
+
+            // Si está en el selector de proveedor, abrir listado de proveedores
+            if (event.target.id === 'purchaseSupplierSelect') {
+                event.preventDefault();
+                event.stopPropagation();
+                try {
+                    if (typeof event.target.showPicker === 'function') {
+                        event.target.showPicker();
+                        return;
+                    }
+                } catch (e) {}
+                return;
+            }
+
+            // Si está en el número de factura, saltar al selector del primer renglón y abrirlo
+            if (event.target.id === 'purchaseInvoice') {
+                event.preventDefault();
+                event.stopPropagation();
+                const firstRowSelect = document.querySelector('#purchaseItemsTableBody .row-product-select');
+                if (firstRowSelect) {
+                    firstRowSelect.focus();
+                    try {
+                        if (typeof firstRowSelect.showPicker === 'function') {
+                            firstRowSelect.showPicker();
+                        }
+                    } catch (e) {}
+                } else {
+                    this.addPurchaseRow('', 1, 0, 0, 0, true);
+                }
+                return;
+            }
+
+            // En los demás campos (Cantidad, Costo, Descuentos, etc.), ENTER crea un nuevo renglón de compra
             event.preventDefault();
             event.stopPropagation();
 
-            // Agregar nuevo renglón de compra y enfocarlo de inmediato
+            // Agregar nuevo renglón de compra y enfocar su selector de insumo
             this.addPurchaseRow('', 1, 0, 0, 0, true);
         }
     },
@@ -1067,6 +1114,15 @@ const App = {
             
             if (parseFloat(costInput.value) === 0 && refCost > 0) {
                 costInput.value = refCost;
+            }
+
+            // Al elegir un insumo, pasar el foco automáticamente al campo de Cantidad
+            const qtyInput = row.querySelector('.row-qty-input');
+            if (qtyInput) {
+                setTimeout(() => {
+                    qtyInput.focus();
+                    qtyInput.select();
+                }, 50);
             }
         } else {
             unitBadge.textContent = 'u.';
