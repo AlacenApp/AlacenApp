@@ -291,17 +291,1000 @@
                 </div>
             </section>
 
-            <!-- OTRAS SECCIONES (COMPRAS, PRODUCTOS, INVENTARIOS, CMV, ETC) -->
-            <section id="view-compras-nueva" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-ordenes-compra" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-proveedores" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-inventarios" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-cmv" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-productos" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-compras-historial" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-evolucion-compras" class="p-6 space-y-6 hidden animate-fade-in"></section>
-            <section id="view-ajustes" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <!-- VIEW: NUEVA COMPRA -->
+            <section id="view-compras-nueva" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="max-w-5xl mx-auto bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-5 bg-slate-900 text-white flex items-center justify-between">
+                        <div>
+                            <h3 class="text-base font-bold flex items-center gap-2">
+                                <i id="purchaseFormIcon" class="fa-solid fa-cart-shopping text-emerald-400"></i>
+                                <span id="purchaseFormTitle">Carga de Factura de Compra con Impuestos</span>
+                            </h3>
+                            <p class="text-xs text-slate-300 mt-0.5">Liquidación de IVA, Ingresos Brutos y Percepciones.</p>
+                        </div>
+                        <button type="button" onclick="App.resetPurchaseForm()" class="text-xs text-slate-300 hover:text-white underline">Limpiar formulario</button>
+                    </div>
+
+                    <div id="purchaseEditBanner" class="hidden bg-amber-400 text-slate-950 px-5 py-2.5 flex items-center justify-between font-bold text-xs border-b border-amber-500">
+                        <span id="purchaseEditBannerText">Modo Edición</span>
+                        <button type="button" onclick="App.cancelPurchaseEdit()" class="bg-slate-900 text-white px-3 py-1 rounded text-xs">Cancelar Edición</button>
+                    </div>
+
+                    <form id="purchaseForm" onsubmit="App.handleSavePurchase(event)" onkeydown="App.handlePurchaseFormKeydown(event)" class="p-6 space-y-6">
+                        <input type="hidden" id="purchaseEditId" value="">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha Factura *</label>
+                                <input type="date" id="purchaseDate" required onchange="App.handlePurchaseDateChange(this.value)" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Proveedor *</label>
+                                <select id="purchaseSupplierSelect" required onchange="App.handlePurchaseSupplierChange(this.value)" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                                    <option value="">-- Seleccionar Proveedor --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Nº Factura</label>
+                                <input type="text" id="purchaseInvoice" placeholder="Ej: FC-A 0001-00045" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Estado de Pago *</label>
+                                <select id="purchasePaymentStatus" onchange="App.handlePurchasePaymentStatusChange(this.value)" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold">
+                                    <option value="pagada" class="text-emerald-700 font-bold">✓ Pagada</option>
+                                    <option value="pendiente" class="text-red-600 font-bold">⏳ Pendiente (Cta Cte)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Forma de Pago</label>
+                                <select id="purchasePaymentMethod" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                                    <option value="Cuenta Corriente / A Pagar">Cuenta Corriente</option>
+                                    <option value="Cheque">Cheque</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha Pago</label>
+                                <input type="date" id="purchasePaymentDate" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                            </div>
+                        </div>
+
+                        <!-- Detalle de Renglones -->
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <h4 class="font-bold text-sm text-slate-800">Renglones de Mercadería e Insumos</h4>
+                                <button type="button" onclick="App.openProductModal(null, true)" class="text-xs text-sky-600 font-semibold">+ Crear nuevo insumo</button>
+                            </div>
+                            <div class="overflow-x-auto border border-slate-200 rounded-lg">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-100 text-slate-700 uppercase font-semibold">
+                                        <tr>
+                                            <th class="py-3 px-3 w-4/12">Insumo / Producto</th>
+                                            <th class="py-3 px-2 w-1/12 text-center">Unidad</th>
+                                            <th class="py-3 px-2 w-1/12">Cantidad</th>
+                                            <th class="py-3 px-2 w-2/12">Costo Neto Unit. ($)</th>
+                                            <th class="py-3 px-2 w-2/12 text-center">Descuento (% / $)</th>
+                                            <th class="py-3 px-3 w-2/12 text-right">Subtotal Neto ($)</th>
+                                            <th class="py-3 px-2 text-center"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="purchaseItemsTableBody" onkeydown="App.handlePurchaseRowKeydown(event)" class="divide-y divide-slate-200 bg-white"></tbody>
+                                </table>
+                            </div>
+                            <button type="button" onclick="App.addPurchaseRow('', 1, 0, 0, 0, true)" class="w-full py-2.5 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50 rounded-lg text-xs font-bold">+ Agregar otro renglón de compra (o presiona ENTER ↵)</button>
+                        </div>
+
+                        <!-- Totales Impositivos -->
+                        <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Subtotal Neto Gravado ($)</label>
+                                    <input type="number" step="any" id="taxNetSubtotal" readonly class="w-full bg-slate-200/80 font-bold border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Alícuota / Monto IVA ($)</label>
+                                    <div class="flex gap-2">
+                                        <select id="taxIvaRate" onchange="App.recalculateTaxesFromRate()" class="w-24 bg-white border border-slate-300 rounded-lg px-2 py-2 text-xs font-bold">
+                                            <option value="21">21.0 %</option>
+                                            <option value="10.5">10.5 %</option>
+                                            <option value="27">27.0 %</option>
+                                            <option value="0">0 % (Exento)</option>
+                                        </select>
+                                        <input type="number" step="any" id="taxIvaAmount" oninput="App.recalculateTotalInvoiceFromInputs()" placeholder="Monto IVA" class="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Percepción IIBB (% / $)</label>
+                                    <div class="flex gap-2">
+                                        <input type="number" step="any" id="taxIibbRate" oninput="App.recalculateIibbFromRate()" placeholder="%" class="w-16 bg-white border border-slate-300 rounded-lg px-2 py-2 text-xs font-bold">
+                                        <input type="number" step="any" id="taxIibbAmount" oninput="App.recalculateTotalInvoiceFromInputs()" placeholder="$ Monto" class="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Percep. IVA / Otros ($)</label>
+                                    <div class="flex gap-2">
+                                        <input type="number" step="any" id="taxIvaPerception" oninput="App.recalculateTotalInvoiceFromInputs()" placeholder="IVA $" class="w-1/2 bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-bold">
+                                        <input type="number" step="any" id="taxOtherTaxes" oninput="App.recalculateTotalInvoiceFromInputs()" placeholder="Otros $" class="w-1/2 bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-bold">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pt-3 border-t border-slate-200 flex justify-between text-xs">
+                                <div>
+                                    <span class="font-bold text-slate-700">Régimen de Costo:</span>
+                                    <select id="purchaseCostMode" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs">
+                                        <option value="net">Costo Neto (IVA Crédito Fiscal)</option>
+                                        <option value="gross">Costo Bruto con Impuestos</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="purchaseUpdateCost" checked class="w-4 h-4 text-sky-600">
+                                    <label for="purchaseUpdateCost" class="text-slate-700 font-medium">Actualizar precio de costo en catálogo</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pie del Formulario y Submit -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-end pt-2">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Notas u Observaciones</label>
+                                <textarea id="purchaseNotes" rows="2" placeholder="Detalles adicionales..." class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs"></textarea>
+                            </div>
+                            <div class="bg-slate-900 text-white p-5 rounded-xl space-y-2">
+                                <div class="flex justify-between text-xs text-slate-300">
+                                    <span>Subtotal Renglones:</span>
+                                    <span id="footerGrossSubtotal" class="font-bold font-mono">$ 0.00</span>
+                                </div>
+                                <div id="footerDiscountRow" class="flex justify-between text-xs text-amber-300 hidden">
+                                    <span>Total Descuentos:</span>
+                                    <span id="footerDiscountAmount" class="font-bold font-mono">- $ 0.00</span>
+                                </div>
+                                <div class="flex justify-between text-xs text-slate-300">
+                                    <span>Subtotal Neto:</span>
+                                    <span id="footerNetSubtotal" class="font-bold font-mono">$ 0.00</span>
+                                </div>
+                                <div class="flex justify-between text-xs text-slate-300">
+                                    <span>Impuestos y Percepciones:</span>
+                                    <span id="footerTotalTaxes" class="font-bold font-mono text-amber-400">$ 0.00</span>
+                                </div>
+                                <div class="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800">
+                                    <span>TOTAL FACTURA:</span>
+                                    <span id="purchaseTotalAmount" class="text-2xl font-black text-emerald-400 font-mono">$ 0.00</span>
+                                </div>
+                                <button type="submit" id="purchaseSubmitBtn" class="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm shadow">
+                                    <i id="purchaseSubmitBtnIcon" class="fa-solid fa-check"></i>
+                                    <span id="purchaseSubmitBtnText">Guardar Factura e Incrementar Stock</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- VIEW: ÓRDENES DE COMPRA (OC) -->
+            <section id="view-ordenes-compra" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-amber-50/60 p-4 rounded-xl border border-amber-200">
+                        <div>
+                            <label class="block text-xs font-bold text-amber-900 mb-1">1. Seleccionar Proveedor *</label>
+                            <select id="ocSupplierSelect" onchange="App.handleOCSupplierSelected(this.value)" class="w-full bg-white border border-amber-300 rounded-lg px-3 py-2 text-sm font-semibold">
+                                <option value="">-- Elige un proveedor --</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2 flex flex-col justify-center">
+                            <div id="ocSupplierInfoBox" class="text-xs text-slate-600">
+                                <span class="text-slate-400 italic">Selecciona un proveedor para cargar los insumos de reposición.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h4 class="font-bold text-xs uppercase text-slate-700">Insumos Asociados al Proveedor</h4>
+                            <button type="button" onclick="App.addCustomProductToOC()" class="text-xs text-sky-600 font-semibold">+ Agregar otro insumo</button>
+                        </div>
+                        <div class="overflow-x-auto border border-slate-200 rounded-lg">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-100 text-slate-700 font-bold">
+                                    <tr>
+                                        <th class="py-3 px-3">Código</th>
+                                        <th class="py-3 px-4">Insumo</th>
+                                        <th class="py-3 px-2 text-center">Unidad</th>
+                                        <th class="py-3 px-3 text-right">Stock Actual</th>
+                                        <th class="py-3 px-3 text-right">Stock Mín.</th>
+                                        <th class="py-3 px-3 text-right bg-amber-50">Cantidad a Pedir</th>
+                                        <th class="py-3 px-3 text-right">Costo Est. ($)</th>
+                                        <th class="py-3 px-4 text-right font-black">Subtotal Est. ($)</th>
+                                        <th class="py-3 px-2 text-center"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ocItemsTableBody" class="divide-y divide-slate-200">
+                                    <tr><td colspan="9" class="py-8 text-center text-slate-400">Selecciona un proveedor arriba.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-end pt-2">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones</label>
+                            <textarea id="ocNotes" rows="2" placeholder="Notas para el pedido..." class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs"></textarea>
+                        </div>
+                        <div class="bg-slate-900 text-white p-5 rounded-xl space-y-3">
+                            <div class="flex justify-between text-base font-bold text-white">
+                                <span>TOTAL ESTIMADO OC:</span>
+                                <span id="ocGrandTotal" class="text-2xl font-black text-amber-400 font-mono">$ 0.00</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="App.saveCurrentPurchaseOrder()" class="flex-1 py-2.5 bg-amber-600 text-slate-950 font-bold text-xs rounded-lg shadow">Guardar Orden</button>
+                                <button onclick="App.printCurrentPurchaseOrder()" class="py-2.5 px-4 bg-slate-800 text-white font-semibold text-xs rounded-lg border border-slate-700">Imprimir / PDF</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 border-b border-slate-100 font-bold text-sm text-slate-800">Historial de Órdenes de Compra Emitidas</div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-100 text-slate-700 font-bold">
+                                <tr>
+                                    <th class="py-3 px-3">Fecha</th>
+                                    <th class="py-3 px-3">Nº Orden</th>
+                                    <th class="py-3 px-4">Proveedor</th>
+                                    <th class="py-3 px-3">Ítems</th>
+                                    <th class="py-3 px-4 text-right">Total Est. ($)</th>
+                                    <th class="py-3 px-3 text-center">Estado</th>
+                                    <th class="py-3 px-3 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ocHistoryTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: DIRECTORIO DE PROVEEDORES -->
+            <section id="view-proveedores" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between gap-4">
+                    <div class="flex items-center gap-3 w-full md:w-auto">
+                        <input type="text" id="supplierSearchInput" onkeyup="App.renderSuppliersView()" placeholder="Buscar proveedor por nombre, CUIT..." class="w-full sm:w-72 bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs">
+                        <span id="suppliersTotalBadge" class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg border">0 proveedores</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="App.openImportModal('proveedores')" class="bg-teal-50 text-teal-700 text-xs font-bold py-2 px-3 rounded-lg border border-teal-300">Importar Lista</button>
+                        <button onclick="App.exportSuppliersToCSV()" class="bg-slate-100 text-slate-700 text-xs font-semibold py-2 px-3 rounded-lg border">Exportar CSV</button>
+                        <button onclick="App.openSupplierModal()" class="bg-teal-600 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow">+ Nuevo Proveedor</button>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-4">Proveedor / Empresa</th>
+                                    <th class="py-3 px-3">CUIT</th>
+                                    <th class="py-3 px-3">Contacto / Dirección</th>
+                                    <th class="py-3 px-3">Teléfono</th>
+                                    <th class="py-3 px-3">Email</th>
+                                    <th class="py-3 px-3">Condición de Pago</th>
+                                    <th class="py-3 px-2 text-center">Insumos</th>
+                                    <th class="py-3 px-4 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="suppliersTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: CARGA DEDICADA DE INVENTARIOS (II / IF) -->
+            <section id="view-inventarios" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <button onclick="App.changePeriod(-1)" class="w-9 h-9 rounded-lg border text-slate-700 flex items-center justify-center"><i class="fa-solid fa-chevron-left"></i></button>
+                        <input type="month" id="invPeriodInput" onchange="App.handlePeriodChange(this.value)" class="font-bold text-slate-800 bg-slate-50 border rounded-lg px-3 py-1.5 text-sm">
+                        <button onclick="App.changePeriod(1)" class="w-9 h-9 rounded-lg border text-slate-700 flex items-center justify-center"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                        <button onclick="App.setInventorySubTab('inicial')" id="subtab-btn-inicial" class="px-4 py-2 rounded-lg text-xs font-bold bg-white text-slate-800 shadow-sm">1. Inventario Inicial (II)</button>
+                        <button onclick="App.setInventorySubTab('final')" id="subtab-btn-final" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-500">2. Conteo Físico Final (IF)</button>
+                        <button onclick="App.setInventorySubTab('snapshots')" id="subtab-btn-snapshots" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-500">Conteos con Fecha</button>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 1: INVENTARIO INICIAL -->
+                <div id="subtab-content-inicial" class="space-y-4">
+                    <div class="bg-sky-50 border border-sky-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between gap-4">
+                        <div>
+                            <h4 class="font-bold text-sm text-sky-900">Carga e Ingreso de Inventario Inicial (II)</h4>
+                            <p class="text-xs text-sky-700">Cantidades y costos con los que arranca el período.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="App.rollForwardInitialInventory()" class="bg-white text-sky-800 border border-sky-300 text-xs font-bold py-2 px-3 rounded-lg shadow-sm">Traer Saldo Anterior</button>
+                            <button onclick="App.saveSheetInitialInventory()" class="bg-sky-600 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm">Guardar Inventario Inicial</button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-3 px-3">Código</th>
+                                        <th class="py-3 px-4">Insumo</th>
+                                        <th class="py-3 px-3">Categoría</th>
+                                        <th class="py-3 px-2 text-center">Unidad</th>
+                                        <th class="py-3 px-3 w-40 text-right bg-sky-50">Cantidad Inicial *</th>
+                                        <th class="py-3 px-3 w-40 text-right bg-slate-50">Costo Unitario ($) *</th>
+                                        <th class="py-3 px-4 text-right font-black">Valor Total ($)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sheetInitialTableBody" class="divide-y divide-slate-200"></tbody>
+                                <tfoot class="bg-slate-50 font-bold border-t text-xs">
+                                    <tr>
+                                        <td colspan="6" class="py-3 px-4 text-right uppercase">VALOR TOTAL INICIAL:</td>
+                                        <td id="sheetInitialGrandTotal" class="py-3 px-4 text-right font-black text-slate-900 text-sm">$ 0.00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 2: CONTEO FINAL -->
+                <div id="subtab-content-final" class="space-y-4 hidden">
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col sm:flex-row justify-between gap-4">
+                        <div>
+                            <h4 class="font-bold text-sm text-emerald-900">Planilla de Conteo Físico - Cierre (IF)</h4>
+                            <p class="text-xs text-emerald-700">Cantidades contadas al cierre para determinar el consumo y CMV.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="App.printBlankCountSheet()" class="bg-white text-slate-700 border text-xs font-bold py-2 px-3 rounded-lg shadow-sm">Imprimir Hoja en Blanco</button>
+                            <button onclick="App.saveSheetFinalInventory()" class="bg-emerald-600 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm">Guardar Conteo Final</button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-3 px-3">Código</th>
+                                        <th class="py-3 px-4">Insumo</th>
+                                        <th class="py-3 px-2 text-center">Unidad</th>
+                                        <th class="py-3 px-3 text-right bg-slate-50">Stock Inicial</th>
+                                        <th class="py-3 px-3 text-right bg-sky-50">Compras Mes</th>
+                                        <th class="py-3 px-3 text-right font-bold bg-indigo-50">Total Disp.</th>
+                                        <th class="py-3 px-3 w-40 text-right bg-emerald-50">Conteo Físico Real *</th>
+                                        <th class="py-3 px-3 text-right font-bold text-indigo-700">Consumo</th>
+                                        <th class="py-3 px-3 text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sheetFinalTableBody" class="divide-y divide-slate-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 3: SNAPSHOTS -->
+                <div id="subtab-content-snapshots" class="space-y-4 hidden">
+                    <div class="bg-violet-50 border border-violet-200 rounded-xl p-4 flex justify-between">
+                        <div>
+                            <h4 class="font-bold text-sm text-violet-900">Conteos Físicos con Fecha</h4>
+                            <p class="text-xs text-violet-700">Registra conteos en fechas específicas.</p>
+                        </div>
+                        <button onclick="App.openSnapshotModal()" class="bg-violet-600 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm">+ Nuevo Conteo</button>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 font-bold">
+                                <tr>
+                                    <th class="py-3 px-4">Nombre Conteo</th>
+                                    <th class="py-3 px-3">Fecha</th>
+                                    <th class="py-3 px-3 text-center">Ítems Contados</th>
+                                    <th class="py-3 px-3">Notas</th>
+                                    <th class="py-3 px-3">Registrado por</th>
+                                    <th class="py-3 px-3 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="snapshotsTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: CONTROL CMV MENSUAL -->
+            <section id="view-cmv" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <button onclick="App.changePeriod(-1)" class="w-9 h-9 rounded-lg border text-slate-700 flex items-center justify-center"><i class="fa-solid fa-chevron-left"></i></button>
+                        <input type="month" id="cmvPeriodInput" onchange="App.handlePeriodChange(this.value)" class="font-bold text-slate-800 bg-slate-50 border rounded-lg px-3 py-1.5 text-sm">
+                        <span id="cmvPeriodBadge" class="text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800">Período Abierto</span>
+                        <button onclick="App.changePeriod(1)" class="w-9 h-9 rounded-lg border text-slate-700 flex items-center justify-center"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="App.exportCMV()" class="bg-slate-800 text-white text-xs font-semibold py-2 px-3 rounded-lg">Exportar Excel</button>
+                        <button onclick="window.print()" class="bg-slate-100 text-slate-700 text-xs font-semibold py-2 px-3 rounded-lg border">Imprimir</button>
+                    </div>
+                </div>
+
+                <!-- Financial Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                        <p class="text-[11px] font-semibold uppercase text-slate-500">1. Inv. Inicial (II)</p>
+                        <h4 id="cmvSummaryInitial" class="text-lg font-black text-slate-800 mt-1">$ 0.00</h4>
+                    </div>
+                    <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                        <p class="text-[11px] font-semibold uppercase text-slate-500">2. Compras Mes (C)</p>
+                        <h4 id="cmvSummaryPurchases" class="text-lg font-black text-sky-600 mt-1">$ 0.00</h4>
+                    </div>
+                    <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                        <p class="text-[11px] font-semibold uppercase text-slate-500">3. Disp. (II + C)</p>
+                        <h4 id="cmvSummaryAvailable" class="text-lg font-black text-indigo-600 mt-1">$ 0.00</h4>
+                    </div>
+                    <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                        <p class="text-[11px] font-semibold uppercase text-slate-500">4. Inv. Final (IF)</p>
+                        <h4 id="cmvSummaryFinal" class="text-lg font-black text-slate-800 mt-1">$ 0.00</h4>
+                    </div>
+                    <div class="bg-emerald-50 rounded-xl p-4 border border-emerald-300 shadow-sm">
+                        <p class="text-[11px] font-bold uppercase text-emerald-800">5. CMV TOTAL (Consumo)</p>
+                        <h4 id="cmvSummaryTotal" class="text-xl font-black text-emerald-700 mt-1">$ 0.00</h4>
+                    </div>
+                </div>
+
+                <!-- Equation Check -->
+                <div class="bg-slate-100 rounded-lg p-3 border border-slate-200 text-xs flex justify-between">
+                    <span><strong>Ecuación:</strong> II (<span id="eqII">$0</span>) + Compras (<span id="eqC">$0</span>) - IF (<span id="eqIF">$0</span>) = CMV (<span id="eqCMV">$0</span>)</span>
+                    <span class="font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">✓ Balance verificado</span>
+                </div>
+
+                <!-- Main CMV Table -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 border-b border-slate-200 flex justify-between bg-slate-50">
+                        <h4 class="font-bold text-sm text-slate-800">Planilla Detallada PPP y Consumo (CMV)</h4>
+                        <input type="text" id="cmvSearchInput" onkeyup="App.filterCMVTable()" placeholder="Buscar insumo..." class="w-64 bg-white border rounded-lg px-3 py-1.5 text-xs">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-3">Insumo</th>
+                                    <th class="py-3 px-2 text-center">Unidad</th>
+                                    <th class="py-3 px-3 text-right bg-slate-200/50">Inv. Inicial (II)</th>
+                                    <th class="py-3 px-3 text-right bg-sky-50">Compras Mes</th>
+                                    <th class="py-3 px-3 text-right">Total Disp.</th>
+                                    <th class="py-3 px-3 text-right bg-amber-50 font-black">Costo PPP ($)</th>
+                                    <th class="py-3 px-3 text-right bg-emerald-50">Conteo Final (IF)</th>
+                                    <th class="py-3 px-3 text-right font-bold text-indigo-700">Consumo</th>
+                                    <th class="py-3 px-3 text-right bg-emerald-100/60 font-black text-emerald-800">CMV ($)</th>
+                                    <th class="py-3 px-3 text-right text-slate-500">Valor Final ($)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cmvTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: PRODUCTOS / INSUMOS -->
+            <section id="view-productos" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input type="text" id="prodSearchInput" onkeyup="App.renderProductsTable()" placeholder="Buscar insumo..." class="bg-slate-50 border rounded-lg px-3 py-1.5 text-xs w-60">
+                        <select id="prodCategoryFilter" onchange="App.renderProductsTable()" class="bg-slate-50 border rounded-lg px-3 py-1.5 text-xs">
+                            <option value="">Todas las categorías</option>
+                        </select>
+                        <select id="prodStockFilter" onchange="App.renderProductsTable()" class="bg-slate-50 border rounded-lg px-3 py-1.5 text-xs">
+                            <option value="all">Todo el stock</option>
+                            <option value="low">⚠️ Solo Stock Bajo</option>
+                            <option value="out">❌ Solo Agotados</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="App.openCategoryManagerModal()" class="bg-indigo-50 text-indigo-700 text-xs font-bold py-2 px-3 rounded-lg border">Categorías</button>
+                        <button onclick="App.openImportModal('insumos')" class="bg-emerald-50 text-emerald-700 text-xs font-bold py-2 px-3 rounded-lg border">Importar Excel</button>
+                        <button onclick="App.openProductModal()" class="bg-sky-600 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow">+ Nuevo Insumo</button>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-3">Código</th>
+                                    <th class="py-3 px-4">Nombre Insumo</th>
+                                    <th class="py-3 px-3">Categoría</th>
+                                    <th class="py-3 px-3">Proveedor Habitual</th>
+                                    <th class="py-3 px-2 text-center">Unidad</th>
+                                    <th class="py-3 px-3 text-right">Stock Actual</th>
+                                    <th class="py-3 px-3 text-right">Stock Mín.</th>
+                                    <th class="py-3 px-3 text-right">Costo Neto Ref.</th>
+                                    <th class="py-3 px-3 text-right font-bold">Valor Stock</th>
+                                    <th class="py-3 px-3 text-center">Estado</th>
+                                    <th class="py-3 px-3 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productsTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: HISTORIAL DE COMPRAS -->
+            <section id="view-compras-historial" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                        <span class="text-xs text-slate-500 font-medium uppercase">Total Facturado</span>
+                        <h4 id="histTotalPurchases" class="text-xl font-black text-slate-800 mt-1">$ 0.00</h4>
+                    </div>
+                    <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                        <span class="text-xs text-emerald-600 font-medium uppercase">Total Pagado</span>
+                        <h4 id="histTotalPaid" class="text-xl font-black text-emerald-600 mt-1">$ 0.00</h4>
+                    </div>
+                    <div class="bg-white rounded-xl p-4 border border-red-200 shadow-sm bg-red-50/30">
+                        <span class="text-xs text-red-700 font-medium uppercase">Total Pendiente (A Pagar)</span>
+                        <h4 id="histTotalPending" class="text-xl font-black text-red-600 mt-1">$ 0.00</h4>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between gap-4">
+                    <div class="flex gap-3">
+                        <input type="month" id="purchasesMonthFilter" onchange="App.renderPurchasesTable()" class="bg-slate-50 border rounded-lg px-3 py-1.5 text-xs">
+                        <select id="purchasesPaymentFilter" onchange="App.renderPurchasesTable()" class="bg-slate-50 border rounded-lg px-3 py-1.5 text-xs font-bold">
+                            <option value="all">Todos los pagos</option>
+                            <option value="pendiente">⏳ Solo Pendientes de Pago</option>
+                            <option value="pagada">✓ Solo Pagadas</option>
+                        </select>
+                        <input type="text" id="purchasesSearchInput" onkeyup="App.renderPurchasesTable()" placeholder="Buscar factura..." class="bg-slate-50 border rounded-lg px-3 py-1.5 text-xs w-48">
+                    </div>
+                    <button onclick="App.navigate('compras-nueva')" class="bg-emerald-600 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow">+ Nueva Factura</button>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-3">Fecha</th>
+                                    <th class="py-3 px-3">Nº Factura</th>
+                                    <th class="py-3 px-4">Proveedor</th>
+                                    <th class="py-3 px-3 text-center">Estado Pago</th>
+                                    <th class="py-3 px-3">Fecha / Medio Pago</th>
+                                    <th class="py-3 px-3 text-right">Neto ($)</th>
+                                    <th class="py-3 px-3 text-right">IVA ($)</th>
+                                    <th class="py-3 px-4 text-right font-black">TOTAL ($)</th>
+                                    <th class="py-3 px-3 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="purchasesHistoryTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: EVOLUCIÓN DE COMPRAS -->
+            <section id="view-evolucion-compras" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="flex justify-between border-b pb-4">
+                    <div class="flex gap-2 bg-slate-200/70 p-1 rounded-xl">
+                        <button onclick="App.switchEvolucionTab('proveedor')" id="tabEvolProveedor" class="px-4 py-2 rounded-lg text-xs font-bold bg-white text-slate-800 shadow-sm">Historial por Proveedor</button>
+                        <button onclick="App.switchEvolucionTab('insumo')" id="tabEvolInsumo" class="px-4 py-2 rounded-lg text-xs font-bold text-slate-600">Evolución de Precios por Insumo</button>
+                    </div>
+                </div>
+
+                <div id="subtabEvolProveedor" class="space-y-6">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between gap-4">
+                        <select id="evolSupplierSelect" onchange="App.renderEvolucionProveedor()" class="bg-slate-50 border rounded-lg px-3 py-2 text-xs font-semibold">
+                            <option value="">-- Todos los Proveedores --</option>
+                        </select>
+                        <button onclick="App.exportEvolucionProveedorToCSV()" class="bg-emerald-600 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow">Exportar Excel</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h4 class="font-bold text-sm text-slate-800 mb-2">Evolución Mensual de Compras ($)</h4>
+                        <div class="relative h-64 w-full"><canvas id="supplierPurchasesChart"></canvas></div>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-3">Fecha</th>
+                                    <th class="py-3 px-3">Nº Factura</th>
+                                    <th class="py-3 px-4">Proveedor</th>
+                                    <th class="py-3 px-4">Insumos</th>
+                                    <th class="py-3 px-3 text-center">Estado</th>
+                                    <th class="py-3 px-3 text-right">Subtotal Neto ($)</th>
+                                    <th class="py-3 px-3 text-right">Dto ($)</th>
+                                    <th class="py-3 px-4 text-right font-black">Total Factura ($)</th>
+                                    <th class="py-3 px-2 text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="evolSupplierTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="subtabEvolInsumo" class="space-y-6 hidden">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between gap-4">
+                        <select id="evolProductSelect" onchange="App.renderEvolucionInsumo()" class="bg-slate-50 border rounded-lg px-3 py-2 text-xs font-bold">
+                            <!-- Insumos dinámicos -->
+                        </select>
+                        <button onclick="App.exportEvolucionInsumoToCSV()" class="bg-emerald-600 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow">Exportar Excel</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h4 class="font-bold text-sm text-slate-800 mb-2">Curva de Evolución del Costo Unitario Neto ($)</h4>
+                        <div class="relative h-72 w-full"><canvas id="productPriceEvolutionChart"></canvas></div>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-3">Fecha</th>
+                                    <th class="py-3 px-4">Proveedor</th>
+                                    <th class="py-3 px-3">Nº Factura</th>
+                                    <th class="py-3 px-3 text-right">Cantidad</th>
+                                    <th class="py-3 px-2 text-center">Unidad</th>
+                                    <th class="py-3 px-3 text-right">Costo Lista ($)</th>
+                                    <th class="py-3 px-3 text-right">Dto (% / $)</th>
+                                    <th class="py-3 px-3 text-right font-black">Costo Neto Unit. ($)</th>
+                                    <th class="py-3 px-3 text-right">Subtotal ($)</th>
+                                    <th class="py-3 px-3 text-center">Variación %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="evolProdTableBody" class="divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: CONFIGURACIÓN Y BACKUPS -->
+            <section id="view-ajustes" class="p-6 space-y-6 hidden animate-fade-in">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <!-- Configuración de Usuarios -->
+                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <div class="flex justify-between border-b pb-3">
+                            <h3 class="font-bold text-base text-slate-800">Usuarios y Control de Accesos (RBAC)</h3>
+                            <button onclick="App.openUserModal()" class="bg-indigo-600 text-white font-bold text-xs py-1.5 px-3 rounded">+ Nuevo Usuario</button>
+                        </div>
+                        <div class="mt-4 border rounded-xl overflow-hidden">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-100 text-slate-700 font-bold border-b">
+                                    <tr>
+                                        <th class="py-2.5 px-3">Usuario</th>
+                                        <th class="py-2.5 px-3">Nombre</th>
+                                        <th class="py-2.5 px-3 text-center">Rol</th>
+                                        <th class="py-2.5 px-3 text-center">PIN</th>
+                                        <th class="py-2.5 px-3 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTableBody" class="divide-y divide-slate-200 bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Datos del Negocio -->
+                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <h3 class="font-bold text-base text-slate-800 border-b pb-3">Datos del Negocio</h3>
+                        <form onsubmit="App.saveSettings(event)" class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Nombre Comercial</label>
+                                <input type="text" id="settingBusinessName" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Moneda</label>
+                                <input type="text" id="settingCurrency" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">IVA Predeterminado</label>
+                                <select id="settingDefaultIva" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm">
+                                    <option value="21">21.0 %</option>
+                                    <option value="10.5">10.5 %</option>
+                                    <option value="0">0 %</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-3 flex justify-end">
+                                <button type="submit" class="bg-sky-600 text-white font-bold text-xs py-2 px-4 rounded-lg">Guardar Cambios</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Copias de Seguridad -->
+                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <h3 class="font-bold text-base text-slate-800 border-b pb-3">Copias de Seguridad (Backup)</h3>
+                        <div class="mt-4 flex gap-4">
+                            <button onclick="StorageManager.exportAllDataAsJSON()" class="bg-indigo-600 text-white font-bold text-xs py-2.5 px-4 rounded-lg">Descargar Copia (.json)</button>
+                            <label class="bg-slate-100 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-lg border cursor-pointer">
+                                Restaurar Copia
+                                <input type="file" id="importFileInput" onchange="App.handleImportBackup(event)" accept=".json" class="hidden">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </main>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODALES DE LA APLICACIÓN                  -->
+    <!-- ========================================== -->
+
+    <!-- MODAL: PRODUCTO (ALTA / EDICIÓN) -->
+    <div id="productModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border overflow-hidden">
+            <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 id="productModalTitle" class="font-bold text-sm">Nuevo Insumo</h3>
+                <button onclick="App.closeProductModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="productForm" onsubmit="App.handleSaveProduct(event)" class="p-5 space-y-4 text-xs">
+                <input type="hidden" id="prodFormId">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Código / SKU</label>
+                        <input type="text" id="prodFormCode" placeholder="Ej: HAR-001" class="w-full bg-slate-50 border rounded-lg px-3 py-2 uppercase">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Unidad *</label>
+                        <select id="prodFormUnit" required class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                            <option value="kg">kg</option>
+                            <option value="u.">u.</option>
+                            <option value="l">l</option>
+                            <option value="caja">caja</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nombre Insumo *</label>
+                    <input type="text" id="prodFormName" required placeholder="Ej: Harina 0000" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Categoría</label>
+                    <select id="prodFormCategorySelect" class="w-full bg-slate-50 border rounded-lg px-3 py-2"></select>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Proveedor Habitual</label>
+                    <select id="prodFormSupplierSelect" class="w-full bg-slate-50 border rounded-lg px-3 py-2"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Stock Actual</label>
+                        <input type="number" step="any" id="prodFormStock" value="0" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Stock Mínimo</label>
+                        <input type="number" step="any" id="prodFormMinStock" value="10" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Costo Neto Ref. ($)</label>
+                        <input type="number" step="any" id="prodFormCost" value="0" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Precio Venta ($ opcional)</label>
+                        <input type="number" step="any" id="prodFormSale" value="0" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="App.closeProductModal()" class="px-4 py-2 border rounded text-slate-700">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-sky-600 text-white font-bold rounded shadow">Guardar Insumo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: PROVEEDOR (ALTA / EDICIÓN) -->
+    <div id="supplierModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border overflow-hidden">
+            <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 id="supplierModalTitle" class="font-bold text-sm">Nuevo Proveedor</h3>
+                <button onclick="App.closeSupplierModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="supplierForm" onsubmit="App.handleSaveSupplier(event)" class="p-5 space-y-4 text-xs">
+                <input type="hidden" id="supFormId">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nombre / Razón Social *</label>
+                    <input type="text" id="supFormName" required placeholder="Ej: Molinos del Plata S.A." class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">CUIT</label>
+                        <input type="text" id="supFormCuit" placeholder="30-XXXXXXXX-X" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Rubro</label>
+                        <input type="text" id="supFormCategory" placeholder="Molinería, Lácteos..." class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Teléfono</label>
+                        <input type="text" id="supFormPhone" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Email</label>
+                        <input type="email" id="supFormEmail" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="App.closeSupplierModal()" class="px-4 py-2 border rounded text-slate-700">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-teal-600 text-white font-bold rounded shadow">Guardar Proveedor</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: REGISTRAR PAGO -->
+    <div id="paymentModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full shadow-2xl border overflow-hidden">
+            <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 class="font-bold text-sm">Modificar Estado de Pago</h3>
+                <button onclick="App.closePaymentModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="App.handleSavePayment(event)" class="p-5 space-y-4 text-xs">
+                <input type="hidden" id="payModalPurchaseId">
+                <div>
+                    <span class="text-slate-400">Comprobante:</span>
+                    <h4 id="payModalInvoice" class="font-bold text-sm text-slate-800">FC-A 0001-00045</h4>
+                    <p class="text-slate-500">Monto: <strong id="payModalTotal" class="text-emerald-700">$ 0.00</strong></p>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Estado del Pago *</label>
+                    <select id="payModalStatus" onchange="App.handlePayModalStatusChange(this.value)" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm font-bold">
+                        <option value="pagada" class="text-emerald-700">✓ Pagada</option>
+                        <option value="pendiente" class="text-red-600">⏳ Pendiente</option>
+                    </select>
+                </div>
+                <div id="payModalDateBox">
+                    <label class="block font-semibold text-slate-700 mb-1">Fecha de Pago</label>
+                    <input type="date" id="payModalDate" class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="App.closePaymentModal()" class="px-4 py-2 border rounded">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white font-bold rounded">Guardar Estado</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: DETALLE DE FACTURA -->
+    <div id="purchaseDetailModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 class="font-bold text-sm">Comprobante de Factura de Compra</h3>
+                <div class="flex gap-2">
+                    <button onclick="App.editPurchaseFromDetail()" class="text-xs bg-amber-500 text-slate-950 font-bold px-3 py-1.5 rounded">Editar</button>
+                    <button onclick="window.print()" class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded border">Imprimir</button>
+                    <button onclick="App.closePurchaseDetailModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+            </div>
+            <div id="purchaseDetailContent" class="p-6 overflow-y-auto space-y-6 text-xs flex-1"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: CATEGORÍAS -->
+    <div id="categoryManagerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border overflow-hidden">
+            <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 class="font-bold text-sm">Categorías de Insumos</h3>
+                <button onclick="App.closeCategoryManagerModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-5 space-y-4 text-xs">
+                <form id="categoryForm" onsubmit="App.handleSaveCategory(event)" class="bg-slate-50 p-3.5 rounded-xl border space-y-2">
+                    <input type="hidden" id="catFormId">
+                    <input type="text" id="catFormName" required placeholder="Nombre de categoría *" class="w-full bg-white border rounded-lg px-3 py-1.5">
+                    <button type="submit" id="catFormSubmitBtn" class="w-full py-1.5 bg-indigo-600 text-white font-bold rounded">+ Agregar Categoría</button>
+                </form>
+                <div id="categoryListContainer" class="divide-y border rounded-xl overflow-hidden bg-white"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SNAPSHOT CONTEO -->
+    <div id="snapshotModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b flex justify-between items-center">
+                <h3 id="snapshotModalTitle" class="font-bold text-slate-800 text-base">Nuevo Conteo Físico</h3>
+                <button onclick="App.closeSnapshotModal()" class="w-8 h-8 rounded hover:bg-slate-100 flex items-center justify-center text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 border-b grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-bold mb-1">Nombre Conteo *</label>
+                    <input type="text" id="snapName" placeholder="Ej: Cierre Semana 1" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">Fecha Conteo *</label>
+                    <input type="date" id="snapDate" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">Notas</label>
+                    <input type="text" id="snapNotes" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs">
+                </div>
+            </div>
+            <input type="hidden" id="snapEditId">
+            <div class="overflow-y-auto flex-1">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="bg-slate-100 font-bold border-b sticky top-0">
+                        <tr>
+                            <th class="py-3 px-3">Código</th>
+                            <th class="py-3 px-4">Insumo</th>
+                            <th class="py-3 px-3">Categoría</th>
+                            <th class="py-3 px-2 text-center">Unidad</th>
+                            <th class="py-3 px-3 text-right bg-violet-50">Cantidad Contada *</th>
+                        </tr>
+                    </thead>
+                    <tbody id="snapshotProductsBody" class="divide-y"></tbody>
+                </table>
+            </div>
+            <div class="p-4 border-t flex justify-end gap-2 bg-slate-50">
+                <button onclick="App.closeSnapshotModal()" class="px-4 py-2 text-xs font-semibold text-slate-600">Cancelar</button>
+                <button onclick="App.saveSnapshot()" class="bg-violet-600 text-white text-xs font-bold py-2 px-5 rounded-lg shadow">Guardar Conteo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: USUARIOS -->
+    <div id="userModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl border overflow-hidden">
+            <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                <h3 id="userModalTitle" class="font-bold text-sm">Nuevo Usuario</h3>
+                <button onclick="App.closeUserModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="userForm" onsubmit="App.handleSaveUser(event)" class="p-5 space-y-4 text-xs">
+                <input type="hidden" id="usrFormId">
+                <div>
+                    <label class="block font-semibold mb-1">Nombre Completo *</label>
+                    <input type="text" id="usrFormName" required class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold mb-1">Usuario *</label>
+                        <input type="text" id="usrFormUsername" required class="w-full bg-slate-50 border rounded-lg px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block font-semibold mb-1">PIN *</label>
+                        <input type="password" id="usrFormPin" required placeholder="4 dígitos" class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-center font-bold">
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1">Rol *</label>
+                    <select id="usrFormRole" onchange="App.handleUserRoleChange(this.value)" class="w-full bg-slate-50 border rounded-lg px-3 py-2 font-bold">
+                        <option value="admin">Administrador (Acceso Total)</option>
+                        <option value="compras">Compras & Facturación</option>
+                        <option value="deposito">Depósito & Inventarios</option>
+                    </select>
+                </div>
+                <div class="pt-3 border-t flex justify-end gap-2">
+                    <button type="button" onclick="App.closeUserModal()" class="px-4 py-2 border rounded">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded shadow">Guardar Usuario</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: IMPORTADOR MASIVO EXCEL/CSV -->
+    <div id="importModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border overflow-hidden flex flex-col max-h-[92vh]">
+            <div class="p-5 border-b bg-emerald-50 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800 text-base">Importador Masivo desde Excel</h3>
+                <button onclick="App.closeImportModal()" class="text-slate-500 hover:text-slate-800"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+                <div id="importInfoBanner" class="bg-sky-50 p-3 rounded-xl border text-sky-900">
+                    <p id="importColumnsHint" class="text-sky-800 text-[11px]">Suba un archivo CSV o pegue celdas de Excel.</p>
+                </div>
+                <textarea id="importPasteTextarea" oninput="App.handleImportPasteInput()" rows="4" placeholder="Pega aquí filas y columnas de Excel..." class="w-full bg-slate-50 border rounded-xl p-2.5 font-mono text-[11px]"></textarea>
+                <div id="importPreviewContainer" class="hidden space-y-2">
+                    <div class="font-bold text-xs">Vista previa de datos (<span id="importPreviewCount">0</span> filas):</div>
+                    <div class="border rounded-xl max-h-48 overflow-y-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead id="importPreviewThead" class="bg-slate-100 font-bold border-b"></thead>
+                            <tbody id="importPreviewTbody" class="divide-y"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t flex justify-between bg-slate-50">
+                <div id="importStatusMessage" class="text-xs text-slate-600 font-medium"></div>
+                <div class="flex gap-2">
+                    <button onclick="App.closeImportModal()" class="px-4 py-2 text-xs font-semibold text-slate-600">Cancelar</button>
+                    <button id="btnExecuteImport" onclick="App.executeImport()" disabled class="bg-emerald-600 text-white text-xs font-bold py-2 px-5 rounded-lg shadow">Confirmar e Importar</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ========================================== -->
