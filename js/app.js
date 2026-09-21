@@ -654,3 +654,84 @@ if (db && db.auth) {
     }
   });
 }
+// Renderizar lista de Insumos
+App.renderProductsTable = async function() {
+  const tbody = document.getElementById('productsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>`;
+
+  const products = await ProductManager.getProducts();
+
+  if (products.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos creados para este local.</td></tr>`;
+    return;
+  }
+
+  const curr = '$';
+  tbody.innerHTML = products.map(p => `
+    <tr class="table-row-hover text-xs">
+      <td class="py-2.5 px-3 font-mono font-bold">${p.code || '-'}</td>
+      <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
+      <td class="py-2.5 px-3 text-slate-500">${p.category || '-'}</td>
+      <td class="py-2.5 px-3">Principal</td>
+      <td class="py-2.5 px-2 text-center font-medium">${p.unit || 'u.'}</td>
+      <td class="py-2.5 px-3 text-right font-black">${p.currentStock}</td>
+      <td class="py-2.5 px-3 text-right text-slate-400">${p.minStock}</td>
+      <td class="py-2.5 px-3 text-right">${curr} ${p.costPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+      <td class="py-2.5 px-3 text-right font-bold">${curr} ${(p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+      <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
+      <td class="py-2.5 px-3 text-right">
+        <button onclick="App.deleteProductFromDb('${p.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+      </td>
+    </tr>
+  `).join('');
+};
+
+// Guardar Insumo desde el Modal
+App.handleSaveProduct = async function(event) {
+  event.preventDefault();
+  try {
+    const formData = {
+      id: document.getElementById('prodFormId').value || undefined,
+      code: document.getElementById('prodFormCode').value,
+      name: document.getElementById('prodFormName').value,
+      category: document.getElementById('prodFormCategorySelect').value,
+      unit: document.getElementById('prodFormUnit').value,
+      currentStock: document.getElementById('prodFormStock').value,
+      minStock: document.getElementById('prodFormMinStock').value,
+      costPrice: document.getElementById('prodFormCost').value,
+      salePrice: document.getElementById('prodFormSale').value
+    };
+
+    await ProductManager.saveProduct(formData);
+    this.closeProductModal();
+    this.showToast('Insumo guardado en Supabase', 'success');
+    await this.renderProductsTable();
+  } catch (e) {
+    alert(e.message);
+  }
+};
+
+// Eliminar Insumo
+App.deleteProductFromDb = async function(id) {
+  if (!confirm('¿Deseas eliminar este insumo de Supabase?')) return;
+  try {
+    await ProductManager.deleteProduct(id);
+    this.showToast('Insumo eliminado', 'info');
+    await this.renderProductsTable();
+  } catch (e) {
+    alert(e.message);
+  }
+};
+
+// Cargar opciones del selector de Categorías
+App.populateDropdowns = async function() {
+  const categories = await ProductManager.getCategories();
+  const prodCatSelect = document.getElementById('prodFormCategorySelect');
+  if (prodCatSelect) {
+    prodCatSelect.innerHTML = categories.length > 0 
+      ? categories.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join('')
+      : '<option value="Materia Prima">Materia Prima</option>';
+  }
+};
