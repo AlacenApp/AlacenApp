@@ -64,7 +64,7 @@ async function cargarLocalesDelUsuario() {
     .from('Perfiles')
     .select('rol')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   if (errorPerfil) {
     console.error("Error al obtener el perfil:", errorPerfil.message);
