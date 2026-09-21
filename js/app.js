@@ -436,3 +436,79 @@ if (db && db.auth) {
     }
   });
 }
+// Renderizar tabla de Proveedores desde Supabase
+App.renderSuppliersView = async function() {
+  const tbody = document.getElementById('suppliersTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>`;
+
+  let suppliers = [];
+  if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
+    suppliers = await SupplierManager.getSuppliers();
+  }
+
+  const badge = document.getElementById('suppliersTotalBadge');
+  if (badge) badge.textContent = `${suppliers.length} proveedores`;
+
+  if (suppliers.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores registrados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = suppliers.map(s => `
+    <tr class="table-row-hover text-xs">
+      <td class="py-3 px-4 font-bold text-slate-900">${s.name}</td>
+      <td class="py-3 px-3 font-mono">${s.cuit || '-'}</td>
+      <td class="py-3 px-3">${s.phone || s.email || '-'}</td>
+      <td class="py-3 px-3">${s.phone || '-'}</td>
+      <td class="py-3 px-3">${s.email || '-'}</td>
+      <td class="py-3 px-3">${s.paymentMethods}</td>
+      <td class="py-3 px-2 text-center">--</td>
+      <td class="py-3 px-4 text-right">
+        <button onclick="App.openSupplierModal('${s.id}')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
+        <button onclick="App.deleteSupplierFromDb('${s.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+      </td>
+    </tr>
+  `).join('');
+};
+
+// Guardar Proveedor desde el Modal
+App.handleSaveSupplier = async function(event) {
+  event.preventDefault();
+  try {
+    const nameInput = document.getElementById('supFormName');
+    if (!nameInput || !nameInput.value.trim()) {
+      alert("Por favor ingresa un nombre para el proveedor.");
+      return;
+    }
+
+    const formData = {
+      id: document.getElementById('supFormId').value || undefined,
+      name: nameInput.value.trim(),
+      cuit: document.getElementById('supFormCuit').value.trim(),
+      category: document.getElementById('supFormCategory').value.trim(),
+      phone: document.getElementById('supFormPhone').value.trim(),
+      email: document.getElementById('supFormEmail').value.trim()
+    };
+
+    await SupplierManager.saveSupplier(formData);
+    this.closeSupplierModal();
+    this.showToast('Proveedor guardado en Supabase', 'success');
+    await this.renderSuppliersView();
+  } catch (e) {
+    alert(e.message || "Error al guardar proveedor");
+  }
+};
+
+// Eliminar Proveedor
+App.deleteSupplierFromDb = async function(id) {
+  if (!confirm('¿Deseas eliminar este proveedor de Supabase?')) return;
+  try {
+    await SupplierManager.deleteSupplier(id);
+    this.showToast('Proveedor eliminado', 'info');
+    await this.renderSuppliersView();
+  } catch (e) {
+    alert(e.message);
+  }
+};
