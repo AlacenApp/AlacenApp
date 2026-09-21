@@ -1,15 +1,19 @@
-// Inicialización de Supabase (usamos var y supabaseClient para evitar choques de nombres)
+// ==========================================
+// 1. INICIALIZACIÓN DE SUPABASE
+// ==========================================
 const SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
 
-var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Usamos 'db' para evitar el choque de nombres con la librería
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+
 // ==========================================
-// FUNCIONES DE AUTENTICACIÓN (SUPABASE AUTH)
+// 2. FUNCIONES DE AUTENTICACIÓN
 // ==========================================
 
-// 1. Registrar un nuevo usuario
 async function registrarUsuario(email, password) {
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await db.auth.signUp({
     email: email,
     password: password,
   });
@@ -23,9 +27,8 @@ async function registrarUsuario(email, password) {
   }
 }
 
-// 2. Iniciar Sesión
 async function iniciarSesion(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await db.auth.signInWithPassword({
     email: email,
     password: password,
   });
@@ -36,22 +39,60 @@ async function iniciarSesion(email, password) {
   } else {
     alert("¡Sesión iniciada correctamente!");
     console.log("Datos de sesión:", data);
-    // Aquí luego llamaremos a la función que carga los locales del usuario
   }
 }
 
-// 3. Cerrar Sesión
 async function cerrarSesion() {
-  const { error } = await supabase.auth.signOut();
+  const { error } = await db.auth.signOut();
   if (error) console.error("Error al salir:", error.message);
   else alert("Sesión cerrada");
 }
-/**
- * App Controller
- * Orquestador principal de la interfaz, eventos, navegación, cálculo de impuestos,
- * categorías, proveedores, órdenes de compra, pagos y control de usuarios y accesos (RBAC).
- */
 
+
+// ==========================================
+// 3. OBTENER LOCALES SEGÚN EL ROL DEL USUARIO
+// ==========================================
+
+async function cargarLocalesDelUsuario() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) {
+    console.log("No hay ningún usuario autenticado.");
+    return;
+  }
+
+  const { data: perfil, error: errorPerfil } = await db
+    .from('Perfiles')
+    .select('rol')
+    .eq('id', user.id)
+    .single();
+
+  if (errorPerfil) {
+    console.error("Error al obtener el perfil:", errorPerfil.message);
+    return;
+  }
+
+  let localesDisponibles = [];
+
+  if (perfil.rol === 'SUPERADMIN') {
+    const { data, error } = await db.from('Locales').select('*');
+    if (error) console.error(error);
+    localesDisponibles = data;
+  } else {
+    const { data, error } = await db
+      .from('Usuarios_Locales')
+      .select('local_id, Locales(*)')
+      .eq('perfil_id', user.id);
+
+    if (error) console.error(error);
+    localesDisponibles = data ? data.map(item => item.Locales) : [];
+  }
+
+  console.log(`Rol detectado: ${perfil.rol}`);
+  console.log("Locales a los que tiene acceso:", localesDisponibles);
+
+  alert(`Bienvenido. Rol: ${perfil.rol}\nTienes acceso a ${localesDisponibles.length} local(es).`);
+  return localesDisponibles;
+}
 const App = {
     currentView: 'dashboard',
     activePeriod: '',
@@ -4346,56 +4387,3 @@ const App = {
         }
     }
 };
-
-window.addEventListener('DOMContentLoaded', () => {
-    App.init();
-});
-// ==========================================
-// OBTENER LOCALES SEGÚN EL ROL DEL USUARIO
-// ==========================================
-
-async function cargarLocalesDelUsuario() {
-  // 1. Obtener el usuario que está navegando
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    console.log("No hay ningún usuario autenticado.");
-    return;
-  }
-
-  // 2. Consultar el rol en la tabla Perfiles
-  const { data: perfil, error: errorPerfil } = await supabase
-    .from('Perfiles')
-    .select('rol')
-    .eq('id', user.id)
-    .single();
-
-  if (errorPerfil) {
-    console.error("Error al obtener el perfil:", errorPerfil.message);
-    return;
-  }
-
-  let localesDisponibles = [];
-
-  // 3. Aplicar lógica RBAC
-  if (perfil.rol === 'SUPERADMIN') {
-    // Si es Creador / SuperAdmin, trae TODOS los locales
-    const { data, error } = await supabase.from('Locales').select('*');
-    if (error) console.error(error);
-    localesDisponibles = data;
-  } else {
-    // Si es Manager / Encargado, trae solo los locales que tiene vinculados
-    const { data, error } = await supabase
-      .from('Usuarios_Locales')
-      .select('local_id, Locales(*)')
-      .eq('perfil_id', user.id);
-
-    if (error) console.error(error);
-    localesDisponibles = data ? data.map(item => item.Locales) : [];
-  }
-
-  console.log(`Rol detectado: ${perfil.rol}`);
-  console.log("Locales a los que tiene acceso:", localesDisponibles);
-
-  alert(`Bienvenido. Rol: ${perfil.rol}\nTienes acceso a ${localesDisponibles.length} local(es).`);
-  return localesDisponibles;
-}
