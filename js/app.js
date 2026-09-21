@@ -363,7 +363,137 @@ window.cerrarSesion = async function() {
   }
 };
 
+async function // Función para obtener el ID numérico del local activo
+App.getLocalId = function() {
+  const selector = document.getElementById('selectorLocales');
+  if (!selector || !selector.value) return null;
+  const val = parseInt(selector.value, 10);
+  return isNaN(val) ? selector.value : val;
+};
+
+// Re-renderizar la vista activa al cambiar de local
+App.renderCurrentView = async function() {
+  if (this.currentView === 'productos') {
+    await this.renderProductsTable();
+  } else if (this.currentView === 'proveedores') {
+    await this.renderSuppliersView();
+  } else if (this.currentView === 'dashboard') {
+    this.renderDashboard();
+  }
+};
+
+async function // Función para obtener el ID numérico del local activo
+App.getLocalId = function() {
+  const selector = document.getElementById('selectorLocales');
+  if (!selector || !selector.value) return null;
+  const val = parseInt(selector.value, 10);
+  return isNaN(val) ? selector.value : val;
+};
+
+// Re-renderizar la vista activa al cambiar de local
+App.renderCurrentView = async function() {
+  if (this.currentView === 'productos') {
+    await this.renderProductsTable();
+  } else if (this.currentView === 'proveedores') {
+    await this.renderSuppliersView();
+  } else if (this.currentView === 'dashboard') {
+    this.renderDashboard();
+  }
+};
+
 async function cargarLocalesDelUsuario() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return [];
+
+  let localesDisponibles = [];
+  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
+  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
+
+  if (rolActual === 'SUPERADMIN') {
+    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = data || [];
+  } else {
+    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
+    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
+  }
+
+  if (localesDisponibles.length === 0) {
+    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = todosLocales || [];
+  }
+
+  const selector = document.getElementById('selectorLocales');
+  if (selector) {
+    selector.innerHTML = localesDisponibles.map(local => 
+      `<option value="${local.id}">${local.nombre_local}</option>`
+    ).join('');
+
+    if (localesDisponibles.length > 0) {
+      selector.value = localesDisponibles[0].id;
+    }
+
+    // Evento de cambio de local: refresca automáticamente la pantalla visible
+    selector.onchange = async () => {
+      if (window.App) {
+        await window.App.populateDropdowns();
+        await window.App.renderCurrentView();
+      }
+    };
+  }
+
+  if (window.App) {
+    await window.App.populateDropdowns();
+    await window.App.renderCurrentView();
+  }
+
+  return localesDisponibles;
+}calesDelUsuario() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return [];
+
+  let localesDisponibles = [];
+  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
+  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
+
+  if (rolActual === 'SUPERADMIN') {
+    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = data || [];
+  } else {
+    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
+    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
+  }
+
+  if (localesDisponibles.length === 0) {
+    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = todosLocales || [];
+  }
+
+  const selector = document.getElementById('selectorLocales');
+  if (selector) {
+    selector.innerHTML = localesDisponibles.map(local => 
+      `<option value="${local.id}">${local.nombre_local}</option>`
+    ).join('');
+
+    if (localesDisponibles.length > 0) {
+      selector.value = localesDisponibles[0].id;
+    }
+
+    // Evento de cambio de local: refresca automáticamente la pantalla visible
+    selector.onchange = async () => {
+      if (window.App) {
+        await window.App.populateDropdowns();
+        await window.App.renderCurrentView();
+      }
+    };
+  }
+
+  if (window.App) {
+    await window.App.populateDropdowns();
+    await window.App.renderCurrentView();
+  }
+
+  return localesDisponibles;
+}calesDelUsuario() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) return [];
 
@@ -426,7 +556,137 @@ if (db && db.auth) {
     if (session) {
       if (cajaLogin) cajaLogin.style.display = 'none';
       if (cajaApp) cajaApp.style.display = 'flex';
-      cargarLocalesDelUsuario();
+      // Función para obtener el ID numérico del local activo
+App.getLocalId = function() {
+  const selector = document.getElementById('selectorLocales');
+  if (!selector || !selector.value) return null;
+  const val = parseInt(selector.value, 10);
+  return isNaN(val) ? selector.value : val;
+};
+
+// Re-renderizar la vista activa al cambiar de local
+App.renderCurrentView = async function() {
+  if (this.currentView === 'productos') {
+    await this.renderProductsTable();
+  } else if (this.currentView === 'proveedores') {
+    await this.renderSuppliersView();
+  } else if (this.currentView === 'dashboard') {
+    this.renderDashboard();
+  }
+};
+
+async function // Función para obtener el ID numérico del local activo
+App.getLocalId = function() {
+  const selector = document.getElementById('selectorLocales');
+  if (!selector || !selector.value) return null;
+  const val = parseInt(selector.value, 10);
+  return isNaN(val) ? selector.value : val;
+};
+
+// Re-renderizar la vista activa al cambiar de local
+App.renderCurrentView = async function() {
+  if (this.currentView === 'productos') {
+    await this.renderProductsTable();
+  } else if (this.currentView === 'proveedores') {
+    await this.renderSuppliersView();
+  } else if (this.currentView === 'dashboard') {
+    this.renderDashboard();
+  }
+};
+
+async function cargarLocalesDelUsuario() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return [];
+
+  let localesDisponibles = [];
+  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
+  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
+
+  if (rolActual === 'SUPERADMIN') {
+    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = data || [];
+  } else {
+    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
+    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
+  }
+
+  if (localesDisponibles.length === 0) {
+    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = todosLocales || [];
+  }
+
+  const selector = document.getElementById('selectorLocales');
+  if (selector) {
+    selector.innerHTML = localesDisponibles.map(local => 
+      `<option value="${local.id}">${local.nombre_local}</option>`
+    ).join('');
+
+    if (localesDisponibles.length > 0) {
+      selector.value = localesDisponibles[0].id;
+    }
+
+    // Evento de cambio de local: refresca automáticamente la pantalla visible
+    selector.onchange = async () => {
+      if (window.App) {
+        await window.App.populateDropdowns();
+        await window.App.renderCurrentView();
+      }
+    };
+  }
+
+  if (window.App) {
+    await window.App.populateDropdowns();
+    await window.App.renderCurrentView();
+  }
+
+  return localesDisponibles;
+}calesDelUsuario() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return [];
+
+  let localesDisponibles = [];
+  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
+  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
+
+  if (rolActual === 'SUPERADMIN') {
+    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = data || [];
+  } else {
+    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
+    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
+  }
+
+  if (localesDisponibles.length === 0) {
+    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
+    localesDisponibles = todosLocales || [];
+  }
+
+  const selector = document.getElementById('selectorLocales');
+  if (selector) {
+    selector.innerHTML = localesDisponibles.map(local => 
+      `<option value="${local.id}">${local.nombre_local}</option>`
+    ).join('');
+
+    if (localesDisponibles.length > 0) {
+      selector.value = localesDisponibles[0].id;
+    }
+
+    // Evento de cambio de local: refresca automáticamente la pantalla visible
+    selector.onchange = async () => {
+      if (window.App) {
+        await window.App.populateDropdowns();
+        await window.App.renderCurrentView();
+      }
+    };
+  }
+
+  if (window.App) {
+    await window.App.populateDropdowns();
+    await window.App.renderCurrentView();
+  }
+
+  return localesDisponibles;
+}calesDelUsuario();
       if (window.App && typeof window.App.init === 'function') {
         window.App.init();
       }

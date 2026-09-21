@@ -1,20 +1,17 @@
 // ==========================================
-// MÓDULO PROVEEDORES (SUPABASE)
+// MÓDULO PROVEEDORES (FILTRADO STRICTO POR LOCAL)
 // ==========================================
 window.SupplierManager = {
 
-  // Obtener proveedores del local activo
+  // Obtener solo los proveedores pertenecientes al local seleccionado
   async getSuppliers() {
-    const selector = document.getElementById('selectorLocales');
-    const localId = selector ? selector.value : null;
+    const localId = window.App ? window.App.getLocalId() : null;
     if (!localId) return [];
-
-    const parsedLocalId = isNaN(parseInt(localId, 10)) ? localId : parseInt(localId, 10);
 
     const { data, error } = await db
       .from('Proveedores')
       .select('*')
-      .eq('local_id', parsedLocalId)
+      .eq('local_id', localId)
       .order('nombre', { ascending: true });
 
     if (error) {
@@ -35,14 +32,11 @@ window.SupplierManager = {
     }));
   },
 
-  // Guardar o Actualizar Proveedor
+  // Guardar vinculando obligatoriamente el local activo
   async saveSupplier(supplierData) {
-    const selector = document.getElementById('selectorLocales');
-    const localId = selector ? selector.value : null;
+    const localId = window.App ? window.App.getLocalId() : null;
 
     if (!localId) throw new Error("No hay un local activo seleccionado.");
-
-    const parsedLocalId = isNaN(parseInt(localId, 10)) ? localId : parseInt(localId, 10);
 
     const payload = {
       nombre: supplierData.name,
@@ -52,7 +46,7 @@ window.SupplierManager = {
       email: supplierData.email || '',
       condicion_pago: supplierData.paymentMethods || 'A convenir',
       contacto: supplierData.contactPerson || '',
-      local_id: parsedLocalId
+      local_id: localId
     };
 
     if (supplierData.id && supplierData.id.trim() !== '') {
