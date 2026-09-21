@@ -1,8 +1,6 @@
 // ==========================================
-// 1. GARANTIZAR OBJETO GLOBAL Y SUPABASE
+// 1. INICIALIZACIÓN DE SUPABASE (GLOBAL SEGURO)
 // ==========================================
-window.App = window.App || {};
-
 window.SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
 window.SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
 
@@ -12,9 +10,9 @@ if (!window.db && window.supabase) {
 var db = window.db;
 
 // ==========================================
-// 2. MÓDULO PRINCIPAL DE NAVEGACIÓN Y VISTAS
+// 2. OBJETO GLOBAL APP CON TODA LA LÓGICA
 // ==========================================
-Object.assign(window.App, {
+window.App = {
     currentView: 'dashboard',
     activePeriod: '',
     inventorySubTab: 'inicial',
@@ -34,10 +32,9 @@ Object.assign(window.App, {
         
         this.activePeriod = `${yyyy}-${mm}`;
         
+        const dateStr = today.toLocaleDateString('es-ES', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
         const dateBadge = document.getElementById('currentDateBadge');
-        if (dateBadge) {
-            dateBadge.textContent = today.toLocaleDateString('es-ES', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-        }
+        if (dateBadge) dateBadge.textContent = dateStr;
 
         const purchaseDateInput = document.getElementById('purchaseDate');
         if (purchaseDateInput) purchaseDateInput.value = `${yyyy}-${mm}-${dd}`;
@@ -65,7 +62,11 @@ Object.assign(window.App, {
 
         this.populateDropdowns();
         this.updateHeaderBusinessInfo();
-        this.renderDashboard();
+
+        this.sidebarHidden = localStorage.getItem('sidebar_hidden') === 'true';
+        this._applySidebarState(false);
+
+        this.navigate('dashboard');
     },
 
     updateHeaderBusinessInfo: function() {
@@ -185,7 +186,7 @@ Object.assign(window.App, {
             'ordenes-compra': { title: 'Órdenes de Compra', sub: 'Sugerencias de reposición por stock bajo' },
             'proveedores': { title: 'Directorio de Proveedores', sub: 'Fichas comerciales y datos fiscales' },
             'inventarios': { title: 'Carga de Inventarios (II / IF)', sub: 'Planillas de conteo físico' },
-            'cmv': { title: 'Control CMV Mensual', sub: 'Calculo de costo de mercadería vendida' },
+            'cmv': { title: 'Control CMV Mensual', sub: 'Cálculo de costo de mercadería vendida' },
             'productos': { title: 'Insumos y Categorías', sub: 'Catálogo de existencias y costos' },
             'compras-historial': { title: 'Historial de Pagos', sub: 'Registro de facturas y cuentas a pagar' },
             'evolucion-compras': { title: 'Evolución de Compras', sub: 'Historial de costos por insumo' },
@@ -222,6 +223,9 @@ Object.assign(window.App, {
         setTimeout(() => toast.remove(), 3000);
     },
 
+    // ==========================================
+    // DASHBOARD Y TABLAS
+    // ==========================================
     renderDashboard: function() {
         if (typeof StorageManager === 'undefined') return;
         const products = StorageManager.getProducts();
@@ -351,12 +355,150 @@ Object.assign(window.App, {
         `).join('');
     },
 
-    renderPurchasesTable: function() {},
-    renderOCHistoryTable: function() {},
-    renderInventorySheets: function() {},
-    renderCMVView: function() {},
-    renderEvolucionProveedor: function() {},
-    renderUsersTable: function() {},
+    renderPurchasesTable: function() {
+        if (typeof StorageManager === 'undefined') return;
+        const purchases = StorageManager.getPurchases();
+        const tbody = document.getElementById('purchasesHistoryTableBody');
+        if (!tbody) return;
+        if (purchases.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = purchases.map(p => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-2.5 px-3">${p.date || '-'}</td>
+                <td class="py-2.5 px-3 font-mono font-bold">${p.invoiceNumber || 'S/N'}</td>
+                <td class="py-2.5 px-4 font-semibold">${p.supplier || '-'}</td>
+                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-emerald-100 text-emerald-800">✓ Pagada</span></td>
+                <td class="py-2.5 px-3">${p.paymentMethod || 'Efectivo'}</td>
+                <td class="py-2.5 px-3 text-right">$ ${(p.netSubtotal || p.totalCost || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-right">$ ${(p.ivaAmount || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-4 text-right font-black">$ ${(p.totalInvoice || p.totalCost || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-right">
+                    <button onclick="App.openPaymentModal('${p.id}')" class="p-1 text-slate-400 hover:text-sky-600"><i class="fa-solid fa-eye"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    renderOCHistoryTable: function() {
+        if (typeof StorageManager === 'undefined') return;
+        const orders = StorageManager.getPurchaseOrders();
+        const tbody = document.getElementById('ocHistoryTableBody');
+        if (!tbody) return;
+        if (orders.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No hay órdenes de compra emitidas.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = orders.map(o => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-2.5 px-3">${o.date}</td>
+                <td class="py-2.5 px-3 font-mono font-bold">${o.orderNumber || o.id}</td>
+                <td class="py-2.5 px-4 font-semibold">${o.supplierName}</td>
+                <td class="py-2.5 px-3">${(o.items || []).length} insumos</td>
+                <td class="py-2.5 px-4 text-right font-black">$ ${(o.totalEstimated || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-amber-100 text-amber-800">Pendiente</span></td>
+                <td class="py-2.5 px-3 text-right">
+                    <button onclick="StorageManager.deletePurchaseOrder('${o.id}'); App.renderOCHistoryTable();" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    renderInventorySheets: function() {
+        if (typeof CMVManager === 'undefined') return;
+        const period = this.activePeriod;
+        const cmvData = CMVManager.calculatePeriodCMV(period);
+        const initialBody = document.getElementById('sheetInitialTableBody');
+        if (initialBody) {
+            if (cmvData.items.length === 0) {
+                initialBody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No hay insumos.</td></tr>`;
+            } else {
+                initialBody.innerHTML = cmvData.items.map(it => `
+                    <tr class="text-xs">
+                        <td class="py-2.5 px-3 font-mono">${it.code}</td>
+                        <td class="py-2.5 px-4 font-semibold">${it.name}</td>
+                        <td class="py-2.5 px-3 text-slate-500">${it.category}</td>
+                        <td class="py-2.5 px-2 text-center font-bold">${it.unit}</td>
+                        <td class="py-2.5 px-3 text-right"><input type="number" value="${it.initialQty || 0}" class="w-24 bg-white border rounded px-2 py-1 text-right"></td>
+                        <td class="py-2.5 px-3 text-right"><input type="number" value="${it.initialUnitCost || 0}" class="w-24 bg-white border rounded px-2 py-1 text-right"></td>
+                        <td class="py-2.5 px-4 text-right font-black">$ ${(it.initialQty * it.initialUnitCost).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+    },
+
+    renderCMVView: function() {
+        if (typeof CMVManager === 'undefined') return;
+        const cmvData = CMVManager.calculatePeriodCMV(this.activePeriod);
+        const tbody = document.getElementById('cmvTableBody');
+        if (!tbody) return;
+        if (cmvData.items.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-slate-400">No hay insumos para calcular CMV.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = cmvData.items.map(it => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-2.5 px-3 font-semibold">${it.name}</td>
+                <td class="py-2.5 px-2 text-center">${it.unit}</td>
+                <td class="py-2.5 px-3 text-right">${it.initialQty}</td>
+                <td class="py-2.5 px-3 text-right text-sky-700 font-bold">${it.purchasedQty}</td>
+                <td class="py-2.5 px-3 text-right font-medium">${it.availableQty}</td>
+                <td class="py-2.5 px-3 text-right font-black text-amber-900">$ ${it.ppp.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-right">${it.hasFinalCount ? it.finalQty : '-'}</td>
+                <td class="py-2.5 px-3 text-right font-bold text-indigo-700">${it.hasFinalCount ? it.usageQty : '-'}</td>
+                <td class="py-2.5 px-3 text-right font-black text-emerald-800">${it.hasFinalCount ? '$ ' + it.cmvValue.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '-'}</td>
+                <td class="py-2.5 px-3 text-right text-slate-600">${it.hasFinalCount ? '$ ' + it.finalValue.toLocaleString('es-ES', { minimumFractionDigits: 2 }) : '-'}</td>
+            </tr>
+        `).join('');
+    },
+
+    renderEvolucionProveedor: function() {
+        if (typeof StorageManager === 'undefined') return;
+        const purchases = StorageManager.getPurchases();
+        const tbody = document.getElementById('evolSupplierTableBody');
+        if (!tbody) return;
+        if (purchases.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay compras registradas.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = purchases.map(p => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-2.5 px-3 font-mono">${p.date || '-'}</td>
+                <td class="py-2.5 px-3 font-bold">${p.invoiceNumber || 'S/N'}</td>
+                <td class="py-2.5 px-4 font-semibold">${p.supplier || '-'}</td>
+                <td class="py-2.5 px-4 text-slate-500 truncate">${(p.items || []).length} insumos</td>
+                <td class="py-2.5 px-3 text-center"><span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">✓ Pagada</span></td>
+                <td class="py-2.5 px-3 text-right">$ ${(p.netSubtotal || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-right">-</td>
+                <td class="py-2.5 px-4 text-right font-black">$ ${(p.totalInvoice || p.totalCost || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-2 text-center"><button onclick="App.openPaymentModal('${p.id}')" class="text-slate-400 hover:text-sky-600"><i class="fa-solid fa-eye"></i></button></td>
+            </tr>
+        `).join('');
+    },
+
+    renderUsersTable: function() {
+        if (typeof StorageManager === 'undefined') return;
+        const users = StorageManager.getUsers();
+        const tbody = document.getElementById('usersTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = users.map(u => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-2.5 px-3 font-bold">@${u.username}</td>
+                <td class="py-2.5 px-3">${u.name}</td>
+                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-indigo-100 text-indigo-800">${u.role}</span></td>
+                <td class="py-2.5 px-3 text-center font-mono">••••</td>
+                <td class="py-2.5 px-3 text-right">
+                    <button onclick="App.openUserModal('${u.id}')" class="p-1 text-slate-500 hover:text-indigo-600"><i class="fa-solid fa-pen-to-square"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    // ==========================================
+    // MODALES Y MANTENIMIENTO
+    // ==========================================
     openProductModal: function(id) { document.getElementById('productModal')?.classList.remove('hidden'); },
     closeProductModal: function() { document.getElementById('productModal')?.classList.add('hidden'); },
     openSupplierModal: function(id) { document.getElementById('supplierModal')?.classList.remove('hidden'); },
@@ -378,15 +520,59 @@ Object.assign(window.App, {
     handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
     handleSavePurchase: function(e) { e.preventDefault(); this.navigate('compras-historial'); },
     saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
+    
+    setInventorySubTab: function(tab) {
+        this.inventorySubTab = tab;
+        const contIni = document.getElementById('subtab-content-inicial');
+        const contFin = document.getElementById('subtab-content-final');
+        const contSnap = document.getElementById('subtab-content-snapshots');
+        if (contIni) contIni.classList.toggle('hidden', tab !== 'inicial');
+        if (contFin) contFin.classList.toggle('hidden', tab !== 'final');
+        if (contSnap) contSnap.classList.toggle('hidden', tab !== 'snapshots');
+        this.renderInventorySheets();
+    },
+
+    switchEvolucionTab: function(tab) {
+        this.evolucionTab = tab;
+        const subProv = document.getElementById('subtabEvolProveedor');
+        const subIns = document.getElementById('subtabEvolInsumo');
+        if (subProv) subProv.classList.toggle('hidden', tab !== 'proveedor');
+        if (subIns) subIns.classList.toggle('hidden', tab !== 'insumo');
+        if (tab === 'proveedor') this.renderEvolucionProveedor();
+    },
+
+    changePeriod: function(delta) {
+        if (!this.activePeriod) return;
+        const parts = this.activePeriod.split('-');
+        let y = parseInt(parts[0], 10);
+        let m = parseInt(parts[1], 10) + delta;
+        if (m > 12) { m = 1; y += 1; }
+        if (m < 1) { m = 12; y -= 1; }
+        this.activePeriod = `${y}-${String(m).padStart(2, '0')}`;
+        const cmvInp = document.getElementById('cmvPeriodInput');
+        if (cmvInp) cmvInp.value = this.activePeriod;
+        const invInp = document.getElementById('invPeriodInput');
+        if (invInp) invInp.value = this.activePeriod;
+        if (this.currentView === 'inventarios') this.renderInventorySheets();
+        if (this.currentView === 'cmv') this.renderCMVView();
+    },
+
+    handlePeriodChange: function(val) {
+        if (!val) return;
+        this.activePeriod = val;
+        if (this.currentView === 'inventarios') this.renderInventorySheets();
+        if (this.currentView === 'cmv') this.renderCMVView();
+    },
+
     loadDemoData: function() {
         if (typeof StorageManager !== 'undefined') {
             StorageManager.loadDemoData();
             this.init();
+            this.showToast('Datos de prueba cargados con éxito');
         }
     }
-});
+};
 
-// Alias global directo
 window.App = window.App;
 
 // ==========================================
@@ -448,7 +634,7 @@ async function cargarLocalesDelUsuario() {
 }
 
 // ==========================================
-// 4. DETECTOR DE CAMBIOS DE SESIÓN
+// 4. DETECTOR DE SESIÓN
 // ==========================================
 if (db && db.auth) {
   db.auth.onAuthStateChange((event, session) => {
