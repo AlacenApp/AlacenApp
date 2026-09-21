@@ -1,8 +1,8 @@
-// Inicialización de Supabase
-const supabaseUrl = 'https://ayyieaupiltisnrabdzn.supabase.co';
-const supabaseKey = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
+// Inicialización de Supabase (usamos var y supabaseClient para evitar choques de nombres)
+const SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
 
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ==========================================
 // FUNCIONES DE AUTENTICACIÓN (SUPABASE AUTH)
 // ==========================================
