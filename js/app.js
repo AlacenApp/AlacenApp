@@ -1,5 +1,5 @@
 // ==========================================
-// 1. CLIENTE SUPABASE (GLOBAL)
+// 1. CONFIGURACIÓN Y CLIENTE SUPABASE
 // ==========================================
 window.SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
 window.SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
@@ -10,7 +10,7 @@ if (!window.db && window.supabase) {
 var db = window.db;
 
 // ==========================================
-// 2. OBJETO GLOBAL APP
+// 2. OBJETO PRINCIPAL DE LA APLICACIÓN (App)
 // ==========================================
 window.App = {
     currentView: 'dashboard',
@@ -51,9 +51,46 @@ window.App = {
         const purchasesMonthFilter = document.getElementById('purchasesMonthFilter');
         if (purchasesMonthFilter) purchasesMonthFilter.value = this.activePeriod;
 
+        this.sidebarHidden = localStorage.getItem('sidebar_hidden') === 'true';
+        this._applySidebarState(false);
+
         this.populateDropdowns();
         this.updateHeaderBusinessInfo();
         this.renderDashboard();
+    },
+
+    // Obtener ID del local activo adaptado a tipo numérico (BIGINT)
+    getLocalId: function() {
+        const selector = document.getElementById('selectorLocales');
+        if (!selector || !selector.value) return null;
+        const val = parseInt(selector.value, 10);
+        return isNaN(val) ? selector.value : val;
+    },
+
+    // Actualizar vista activa ante cambios de local o menú
+    renderCurrentView: async function() {
+        switch (this.currentView) {
+            case 'productos':
+                await this.renderProductsTable();
+                break;
+            case 'proveedores':
+                await this.renderSuppliersView();
+                break;
+            case 'dashboard':
+                this.renderDashboard();
+                break;
+            case 'compras-historial':
+                this.renderPurchasesTable();
+                break;
+            case 'inventarios':
+                this.renderInventorySheets();
+                break;
+            case 'cmv':
+                this.renderCMVView();
+                break;
+            default:
+                break;
+        }
     },
 
     updateHeaderBusinessInfo: function() {
@@ -104,8 +141,8 @@ window.App = {
         let suppliers = [];
         let categories = [];
 
-        if (typeof StorageManager !== 'undefined') {
-            suppliers = StorageManager.getSuppliers();
+        if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
+            suppliers = await SupplierManager.getSuppliers();
         }
 
         if (typeof ProductManager !== 'undefined' && ProductManager.getCategories) {
@@ -115,6 +152,18 @@ window.App = {
         const purchaseSupSelect = document.getElementById('purchaseSupplierSelect');
         if (purchaseSupSelect) {
             purchaseSupSelect.innerHTML = '<option value="">-- Seleccionar Proveedor --</option>' +
+                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        }
+
+        const ocSupSelect = document.getElementById('ocSupplierSelect');
+        if (ocSupSelect) {
+            ocSupSelect.innerHTML = '<option value="">-- Elige un proveedor --</option>' +
+                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        }
+
+        const prodSupSelect = document.getElementById('prodFormSupplierSelect');
+        if (prodSupSelect) {
+            prodSupSelect.innerHTML = '<option value="">-- Sin proveedor asignado --</option>' +
                 suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
         }
 
@@ -132,7 +181,7 @@ window.App = {
         }
     },
 
-    navigate: function(viewId, params) {
+    navigate: async function(viewId, params) {
         if (!params) params = {};
         this.currentView = viewId;
         const views = document.querySelectorAll('main > section');
@@ -170,9 +219,7 @@ window.App = {
         if (pageTitle && titles[viewId]) pageTitle.textContent = titles[viewId].title;
         if (pageSubtitle && titles[viewId]) pageSubtitle.textContent = titles[viewId].sub;
 
-        if (viewId === 'dashboard') this.renderDashboard();
-        else if (viewId === 'productos') this.renderProductsTable();
-
+        await this.renderCurrentView();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     },
 
@@ -188,12 +235,56 @@ window.App = {
     },
 
     renderDashboard: function() {
-        // Dashboard
+        const dashStockValEl = document.getElementById('dashTotalStockValue');
+        if (dashStockValEl) dashStockValEl.textContent = `$ 0.00`;
     },
 
     // ==========================================
-    // MÓDULO INSUMOS (ABRIR / GUARDAR / TABLA)
+    // MÓDULO INSUMOS / PRODUCTOS
     // ==========================================
+    renderProductsTable: async function() {
+        const tbody = document.getElementById('productsTableBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>`;
+
+        let products = [];
+        if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
+            products = await ProductManager.getProducts();
+        }
+
+        const searchInput = document.getElementById('prodSearchInput');
+        const filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        if (filterVal) {
+            products = products.filter(p => p.name.toLowerCase().includes(filterVal) || (p.code && p.code.toLowerCase().includes(filterVal)));
+        }
+
+        if (products.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos para este local.</td></tr>`;
+            return;
+        }
+
+        const curr = '$';
+        tbody.innerHTML = products.map(p => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-2.5 px-3 font-mono font-bold">${p.code || '-'}</td>
+                <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
+                <td class="py-2.5 px-3 text-slate-500">${p.category || '-'}</td>
+                <td class="py-2.5 px-3">Principal</td>
+                <td class="py-2.5 px-2 text-center font-medium">${p.unit || 'u.'}</td>
+                <td class="py-2.5 px-3 text-right font-black">${p.currentStock}</td>
+                <td class="py-2.5 px-3 text-right text-slate-400">${p.minStock}</td>
+                <td class="py-2.5 px-3 text-right">${curr} ${p.costPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-right font-bold">${curr} ${(p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
+                <td class="py-2.5 px-3 text-right">
+                    <button onclick="App.openProductModal('${p.id}')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button onclick="App.deleteProductFromDb('${p.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
     openProductModal: async function(productId) {
         const form = document.getElementById('productForm');
         if (form) form.reset();
@@ -248,49 +339,11 @@ window.App = {
 
             await ProductManager.saveProduct(formData);
             this.closeProductModal();
-            this.showToast('¡Insumo guardado con éxito en Supabase!', 'success');
+            this.showToast('¡Insumo guardado en Supabase!', 'success');
             await this.renderProductsTable();
         } catch (e) {
             alert(e.message || "Error al guardar insumo");
-            console.error(e);
         }
-    },
-
-    renderProductsTable: async function() {
-        const tbody = document.getElementById('productsTableBody');
-        if (!tbody) return;
-
-        tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>`;
-
-        let products = [];
-        if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
-            products = await ProductManager.getProducts();
-        }
-
-        if (products.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos creados para este local.</td></tr>`;
-            return;
-        }
-
-        const curr = '$';
-        tbody.innerHTML = products.map(p => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3 font-mono font-bold">${p.code || '-'}</td>
-                <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
-                <td class="py-2.5 px-3 text-slate-500">${p.category || '-'}</td>
-                <td class="py-2.5 px-3">Principal</td>
-                <td class="py-2.5 px-2 text-center font-medium">${p.unit || 'u.'}</td>
-                <td class="py-2.5 px-3 text-right font-black">${p.currentStock}</td>
-                <td class="py-2.5 px-3 text-right text-slate-400">${p.minStock}</td>
-                <td class="py-2.5 px-3 text-right">${curr} ${p.costPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-right font-bold">${curr} ${(p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
-                <td class="py-2.5 px-3 text-right">
-                    <button onclick="App.openProductModal('${p.id}')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
-                    <button onclick="App.deleteProductFromDb('${p.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
-                </td>
-            </tr>
-        `).join('');
     },
 
     deleteProductFromDb: async function(id) {
@@ -304,21 +357,131 @@ window.App = {
         }
     },
 
-    // Handlers secundarios de formulario
-    handlePurchaseFormKeydown: function(e) {},
-    handlePurchaseHeaderKeydown: function(e) {},
-    handlePurchaseRowKeydown: function(e) {},
+    // ==========================================
+    // MÓDULO PROVEEDORES
+    // ==========================================
+    renderSuppliersView: async function() {
+        const tbody = document.getElementById('suppliersTableBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>`;
+
+        let suppliers = [];
+        if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
+            suppliers = await SupplierManager.getSuppliers();
+        }
+
+        const searchInput = document.getElementById('supplierSearchInput');
+        const filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        if (filterVal) {
+            suppliers = suppliers.filter(s => s.name.toLowerCase().includes(filterVal) || (s.cuit && s.cuit.includes(filterVal)));
+        }
+
+        const badge = document.getElementById('suppliersTotalBadge');
+        if (badge) badge.textContent = `${suppliers.length} proveedores`;
+
+        if (suppliers.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = suppliers.map(s => `
+            <tr class="table-row-hover text-xs">
+                <td class="py-3 px-4 font-bold text-slate-900">${s.name}</td>
+                <td class="py-3 px-3 font-mono">${s.cuit || '-'}</td>
+                <td class="py-3 px-3">${s.contactPerson || '-'}</td>
+                <td class="py-3 px-3">${s.phone || '-'}</td>
+                <td class="py-3 px-3">${s.email || '-'}</td>
+                <td class="py-3 px-3">${s.paymentMethods}</td>
+                <td class="py-3 px-2 text-center">--</td>
+                <td class="py-3 px-4 text-right">
+                    <button onclick="App.openSupplierModal('${s.id}')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button onclick="App.deleteSupplierFromDb('${s.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    openSupplierModal: async function(supplierId) {
+        const form = document.getElementById('supplierForm');
+        if (form) form.reset();
+
+        document.getElementById('supFormId').value = supplierId || '';
+        document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
+
+        if (supplierId) {
+            const suppliers = await SupplierManager.getSuppliers();
+            const s = suppliers.find(item => item.id === supplierId);
+            if (s) {
+                document.getElementById('supFormName').value = s.name || '';
+                document.getElementById('supFormCuit').value = s.cuit || '';
+                document.getElementById('supFormCategory').value = s.category || '';
+                document.getElementById('supFormPhone').value = s.phone || '';
+                document.getElementById('supFormEmail').value = s.email || '';
+            }
+        }
+
+        document.getElementById('supplierModal')?.classList.remove('hidden');
+    },
+
+    closeSupplierModal: function() {
+        document.getElementById('supplierModal')?.classList.add('hidden');
+    },
+
+    handleSaveSupplier: async function(event) {
+        event.preventDefault();
+        try {
+            const nameInput = document.getElementById('supFormName');
+            if (!nameInput || !nameInput.value.trim()) {
+                alert("Por favor ingresa un nombre para el proveedor.");
+                return;
+            }
+
+            const formData = {
+                id: document.getElementById('supFormId').value || undefined,
+                name: nameInput.value.trim(),
+                cuit: document.getElementById('supFormCuit').value.trim(),
+                category: document.getElementById('supFormCategory').value.trim(),
+                phone: document.getElementById('supFormPhone').value.trim(),
+                email: document.getElementById('supFormEmail').value.trim()
+            };
+
+            await SupplierManager.saveSupplier(formData);
+            this.closeSupplierModal();
+            this.showToast('¡Proveedor guardado en Supabase!', 'success');
+            await this.renderSuppliersView();
+        } catch (e) {
+            alert(e.message || "Error al guardar proveedor");
+        }
+    },
+
+    deleteSupplierFromDb: async function(id) {
+        if (!confirm('¿Deseas eliminar este proveedor de Supabase?')) return;
+        try {
+            await SupplierManager.deleteSupplier(id);
+            this.showToast('Proveedor eliminado', 'info');
+            await this.renderSuppliersView();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
+
+    // ==========================================
+    // CONTROLADORES DE EVENTOS SECUNDARIOS Y MODALES
+    // ==========================================
+    handlePurchaseFormKeydown: function(e) { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.addPurchaseRow(); } },
+    handlePurchaseHeaderKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
+    handlePurchaseRowKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
     resetPurchaseForm: function() {},
-    renderSuppliersView: function() {},
+    addPurchaseRow: function() {},
+    removePurchaseRow: function(btn) { btn.closest('tr')?.remove(); },
     renderPurchasesTable: function() {},
     renderOCHistoryTable: function() {},
     renderInventorySheets: function() {},
     renderCMVView: function() {},
     renderEvolucionProveedor: function() {},
     renderUsersTable: function() {},
-    openSupplierModal: function(id) { document.getElementById('supplierModal')?.classList.remove('hidden'); },
-    closeSupplierModal: function() { document.getElementById('supplierModal')?.classList.add('hidden'); },
-    openUserModal: function(id) { document.getElementById('userModal')?.classList.remove('hidden'); },
+    openUserModal: function() { document.getElementById('userModal')?.classList.remove('hidden'); },
     closeUserModal: function() { document.getElementById('userModal')?.classList.add('hidden'); },
     openSnapshotModal: function() { document.getElementById('snapshotModal')?.classList.remove('hidden'); },
     closeSnapshotModal: function() { document.getElementById('snapshotModal')?.classList.add('hidden'); },
@@ -327,13 +490,37 @@ window.App = {
     openPaymentModal: function() { document.getElementById('paymentModal')?.classList.remove('hidden'); },
     closePaymentModal: function() { document.getElementById('paymentModal')?.classList.add('hidden'); },
     openImportModal: function() { document.getElementById('importModal')?.classList.remove('hidden'); },
-    closeImportModal: function() { document.getElementById('importModal')?.classList.add('hidden'); }
+    closeImportModal: function() { document.getElementById('importModal')?.classList.add('hidden'); },
+    handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
+    handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
+    handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
+    handleSavePurchase: function(e) { e.preventDefault(); this.navigate('compras-historial'); },
+    saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
+    setInventorySubTab: function(tab) {
+        this.inventorySubTab = tab;
+        const contIni = document.getElementById('subtab-content-inicial');
+        const contFin = document.getElementById('subtab-content-final');
+        const contSnap = document.getElementById('subtab-content-snapshots');
+        if (contIni) contIni.classList.toggle('hidden', tab !== 'inicial');
+        if (contFin) contFin.classList.toggle('hidden', tab !== 'final');
+        if (contSnap) contSnap.classList.toggle('hidden', tab !== 'snapshots');
+    },
+    switchEvolucionTab: function(tab) {
+        this.evolucionTab = tab;
+        const subProv = document.getElementById('subtabEvolProveedor');
+        const subIns = document.getElementById('subtabEvolInsumo');
+        if (subProv) subProv.classList.toggle('hidden', tab !== 'proveedor');
+        if (subIns) subIns.classList.toggle('hidden', tab !== 'insumo');
+    },
+    changePeriod: function(delta) {},
+    handlePeriodChange: function(val) {},
+    loadDemoData: function() { this.showToast('Datos de prueba cargados'); }
 };
 
 window.App = window.App;
 
 // ==========================================
-// 3. FUNCIONES DE AUTENTICACIÓN
+// 3. FUNCIONES DE AUTENTICACIÓN SUPABASE
 // ==========================================
 window.botonLogin = async function() {
   const emailInput = document.getElementById('input-email');
@@ -363,44 +550,6 @@ window.cerrarSesion = async function() {
   }
 };
 
-async function // Función para obtener el ID numérico del local activo
-App.getLocalId = function() {
-  const selector = document.getElementById('selectorLocales');
-  if (!selector || !selector.value) return null;
-  const val = parseInt(selector.value, 10);
-  return isNaN(val) ? selector.value : val;
-};
-
-// Re-renderizar la vista activa al cambiar de local
-App.renderCurrentView = async function() {
-  if (this.currentView === 'productos') {
-    await this.renderProductsTable();
-  } else if (this.currentView === 'proveedores') {
-    await this.renderSuppliersView();
-  } else if (this.currentView === 'dashboard') {
-    this.renderDashboard();
-  }
-};
-
-async function // Función para obtener el ID numérico del local activo
-App.getLocalId = function() {
-  const selector = document.getElementById('selectorLocales');
-  if (!selector || !selector.value) return null;
-  const val = parseInt(selector.value, 10);
-  return isNaN(val) ? selector.value : val;
-};
-
-// Re-renderizar la vista activa al cambiar de local
-App.renderCurrentView = async function() {
-  if (this.currentView === 'productos') {
-    await this.renderProductsTable();
-  } else if (this.currentView === 'proveedores') {
-    await this.renderSuppliersView();
-  } else if (this.currentView === 'dashboard') {
-    this.renderDashboard();
-  }
-};
-
 async function cargarLocalesDelUsuario() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) return [];
@@ -432,114 +581,26 @@ async function cargarLocalesDelUsuario() {
       selector.value = localesDisponibles[0].id;
     }
 
-    // Evento de cambio de local: refresca automáticamente la pantalla visible
-    selector.onchange = async () => {
+    const nuevoSelector = selector.cloneNode(true);
+    selector.parentNode.replaceChild(nuevoSelector, selector);
+
+    nuevoSelector.addEventListener('change', async () => {
+      const supSearch = document.getElementById('supplierSearchInput');
+      if (supSearch) supSearch.value = '';
+
+      const prodSearch = document.getElementById('prodSearchInput');
+      if (prodSearch) prodSearch.value = '';
+
       if (window.App) {
         await window.App.populateDropdowns();
         await window.App.renderCurrentView();
       }
-    };
+    });
   }
 
   if (window.App) {
     await window.App.populateDropdowns();
     await window.App.renderCurrentView();
-  }
-
-  return localesDisponibles;
-}calesDelUsuario() {
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return [];
-
-  let localesDisponibles = [];
-  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
-  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
-
-  if (rolActual === 'SUPERADMIN') {
-    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = data || [];
-  } else {
-    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
-    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
-  }
-
-  if (localesDisponibles.length === 0) {
-    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = todosLocales || [];
-  }
-
-  const selector = document.getElementById('selectorLocales');
-  if (selector) {
-    selector.innerHTML = localesDisponibles.map(local => 
-      `<option value="${local.id}">${local.nombre_local}</option>`
-    ).join('');
-
-    if (localesDisponibles.length > 0) {
-      selector.value = localesDisponibles[0].id;
-    }
-
-    // Evento de cambio de local: refresca automáticamente la pantalla visible
-    selector.onchange = async () => {
-      if (window.App) {
-        await window.App.populateDropdowns();
-        await window.App.renderCurrentView();
-      }
-    };
-  }
-
-  if (window.App) {
-    await window.App.populateDropdowns();
-    await window.App.renderCurrentView();
-  }
-
-  return localesDisponibles;
-}calesDelUsuario() {
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return [];
-
-  let localesDisponibles = [];
-
-  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
-  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
-
-  if (rolActual === 'SUPERADMIN') {
-    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = data || [];
-  } else {
-    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
-    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
-  }
-
-  // Fallback si no hay relaciones específicas creadas aún
-  if (localesDisponibles.length === 0) {
-    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = todosLocales || [];
-  }
-
-  const selector = document.getElementById('selectorLocales');
-  if (selector) {
-    if (localesDisponibles.length === 0) {
-      selector.innerHTML = '<option value="">No hay locales creados en BD</option>';
-    } else {
-      selector.innerHTML = localesDisponibles.map(local => `<option value="${local.id}">${local.nombre_local}</option>`).join('');
-      selector.value = localesDisponibles[0].id;
-    }
-
-    selector.onchange = async () => {
-      if (window.App) {
-        await window.App.populateDropdowns();
-        if (window.App.currentView === 'productos') {
-          await window.App.renderProductsTable();
-        }
-      }
-    };
-  }
-
-  if (window.App) {
-    await window.App.populateDropdowns();
-    if (window.App.currentView === 'productos') {
-      await window.App.renderProductsTable();
-    }
   }
 
   return localesDisponibles;
@@ -556,137 +617,7 @@ if (db && db.auth) {
     if (session) {
       if (cajaLogin) cajaLogin.style.display = 'none';
       if (cajaApp) cajaApp.style.display = 'flex';
-      // Función para obtener el ID numérico del local activo
-App.getLocalId = function() {
-  const selector = document.getElementById('selectorLocales');
-  if (!selector || !selector.value) return null;
-  const val = parseInt(selector.value, 10);
-  return isNaN(val) ? selector.value : val;
-};
-
-// Re-renderizar la vista activa al cambiar de local
-App.renderCurrentView = async function() {
-  if (this.currentView === 'productos') {
-    await this.renderProductsTable();
-  } else if (this.currentView === 'proveedores') {
-    await this.renderSuppliersView();
-  } else if (this.currentView === 'dashboard') {
-    this.renderDashboard();
-  }
-};
-
-async function // Función para obtener el ID numérico del local activo
-App.getLocalId = function() {
-  const selector = document.getElementById('selectorLocales');
-  if (!selector || !selector.value) return null;
-  const val = parseInt(selector.value, 10);
-  return isNaN(val) ? selector.value : val;
-};
-
-// Re-renderizar la vista activa al cambiar de local
-App.renderCurrentView = async function() {
-  if (this.currentView === 'productos') {
-    await this.renderProductsTable();
-  } else if (this.currentView === 'proveedores') {
-    await this.renderSuppliersView();
-  } else if (this.currentView === 'dashboard') {
-    this.renderDashboard();
-  }
-};
-
-async function cargarLocalesDelUsuario() {
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return [];
-
-  let localesDisponibles = [];
-  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
-  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
-
-  if (rolActual === 'SUPERADMIN') {
-    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = data || [];
-  } else {
-    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
-    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
-  }
-
-  if (localesDisponibles.length === 0) {
-    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = todosLocales || [];
-  }
-
-  const selector = document.getElementById('selectorLocales');
-  if (selector) {
-    selector.innerHTML = localesDisponibles.map(local => 
-      `<option value="${local.id}">${local.nombre_local}</option>`
-    ).join('');
-
-    if (localesDisponibles.length > 0) {
-      selector.value = localesDisponibles[0].id;
-    }
-
-    // Evento de cambio de local: refresca automáticamente la pantalla visible
-    selector.onchange = async () => {
-      if (window.App) {
-        await window.App.populateDropdowns();
-        await window.App.renderCurrentView();
-      }
-    };
-  }
-
-  if (window.App) {
-    await window.App.populateDropdowns();
-    await window.App.renderCurrentView();
-  }
-
-  return localesDisponibles;
-}calesDelUsuario() {
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return [];
-
-  let localesDisponibles = [];
-  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
-  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
-
-  if (rolActual === 'SUPERADMIN') {
-    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = data || [];
-  } else {
-    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
-    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
-  }
-
-  if (localesDisponibles.length === 0) {
-    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = todosLocales || [];
-  }
-
-  const selector = document.getElementById('selectorLocales');
-  if (selector) {
-    selector.innerHTML = localesDisponibles.map(local => 
-      `<option value="${local.id}">${local.nombre_local}</option>`
-    ).join('');
-
-    if (localesDisponibles.length > 0) {
-      selector.value = localesDisponibles[0].id;
-    }
-
-    // Evento de cambio de local: refresca automáticamente la pantalla visible
-    selector.onchange = async () => {
-      if (window.App) {
-        await window.App.populateDropdowns();
-        await window.App.renderCurrentView();
-      }
-    };
-  }
-
-  if (window.App) {
-    await window.App.populateDropdowns();
-    await window.App.renderCurrentView();
-  }
-
-  return localesDisponibles;
-}calesDelUsuario();
+      cargarLocalesDelUsuario();
       if (window.App && typeof window.App.init === 'function') {
         window.App.init();
       }
@@ -696,79 +627,3 @@ async function cargarLocalesDelUsuario() {
     }
   });
 }
-// Renderizar tabla de Proveedores desde Supabase
-App.renderSuppliersView = async function() {
-  const tbody = document.getElementById('suppliersTableBody');
-  if (!tbody) return;
-
-  tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>`;
-
-  let suppliers = [];
-  if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
-    suppliers = await SupplierManager.getSuppliers();
-  }
-
-  const badge = document.getElementById('suppliersTotalBadge');
-  if (badge) badge.textContent = `${suppliers.length} proveedores`;
-
-  if (suppliers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores registrados.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = suppliers.map(s => `
-    <tr class="table-row-hover text-xs">
-      <td class="py-3 px-4 font-bold text-slate-900">${s.name}</td>
-      <td class="py-3 px-3 font-mono">${s.cuit || '-'}</td>
-      <td class="py-3 px-3">${s.phone || s.email || '-'}</td>
-      <td class="py-3 px-3">${s.phone || '-'}</td>
-      <td class="py-3 px-3">${s.email || '-'}</td>
-      <td class="py-3 px-3">${s.paymentMethods}</td>
-      <td class="py-3 px-2 text-center">--</td>
-      <td class="py-3 px-4 text-right">
-        <button onclick="App.openSupplierModal('${s.id}')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
-        <button onclick="App.deleteSupplierFromDb('${s.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
-      </td>
-    </tr>
-  `).join('');
-};
-
-// Guardar Proveedor desde el Modal
-App.handleSaveSupplier = async function(event) {
-  event.preventDefault();
-  try {
-    const nameInput = document.getElementById('supFormName');
-    if (!nameInput || !nameInput.value.trim()) {
-      alert("Por favor ingresa un nombre para el proveedor.");
-      return;
-    }
-
-    const formData = {
-      id: document.getElementById('supFormId').value || undefined,
-      name: nameInput.value.trim(),
-      cuit: document.getElementById('supFormCuit').value.trim(),
-      category: document.getElementById('supFormCategory').value.trim(),
-      phone: document.getElementById('supFormPhone').value.trim(),
-      email: document.getElementById('supFormEmail').value.trim()
-    };
-
-    await SupplierManager.saveSupplier(formData);
-    this.closeSupplierModal();
-    this.showToast('Proveedor guardado en Supabase', 'success');
-    await this.renderSuppliersView();
-  } catch (e) {
-    alert(e.message || "Error al guardar proveedor");
-  }
-};
-
-// Eliminar Proveedor
-App.deleteSupplierFromDb = async function(id) {
-  if (!confirm('¿Deseas eliminar este proveedor de Supabase?')) return;
-  try {
-    await SupplierManager.deleteSupplier(id);
-    this.showToast('Proveedor eliminado', 'info');
-    await this.renderSuppliersView();
-  } catch (e) {
-    alert(e.message);
-  }
-};
