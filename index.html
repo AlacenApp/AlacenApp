@@ -34,6 +34,9 @@
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
 
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
     <!-- ========================================== -->
     <!-- PANTALLA 1: FORMULARIO DE LOGIN            -->
     <!-- ========================================== -->
@@ -67,17 +70,20 @@
     <div id="caja-app" class="flex-1 flex flex-col md:flex-row min-h-screen" style="display: none;">
         
         <!-- SIDEBAR -->
-        <aside id="appSidebar" class="w-full md:w-64 bg-slate-900 text-white flex flex-col flex-shrink-0">
-            <!-- Logo & Local Selector Header -->
+        <aside id="appSidebar" class="w-full md:w-64 bg-slate-900 text-white flex flex-col no-print transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0">
+            <!-- Brand Logo & Selector de Local -->
             <div class="p-5 border-b border-slate-800 space-y-3">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-lg flex-shrink-0">
                         <i class="fa-solid fa-boxes-stacked text-xl"></i>
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h1 class="font-bold text-base leading-tight">AlacenApp</h1>
-                        <span class="text-xs text-sky-400 font-medium">Gestión Comercial</span>
+                        <h1 class="font-bold text-base leading-tight tracking-wide">Stock & CMV</h1>
+                        <span class="text-xs text-sky-400 font-medium" id="headerBusinessName">Gestión Comercial</span>
                     </div>
+                    <button onclick="App.toggleSidebar()" title="Colapsar panel lateral" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0">
+                        <i class="fa-solid fa-angles-left"></i>
+                    </button>
                 </div>
 
                 <!-- SELECTOR DE LOCAL DINÁMICO DE SUPABASE -->
@@ -89,7 +95,7 @@
                 </div>
             </div>
 
-            <!-- Profile Badge & Exit -->
+            <!-- User Status Card in Sidebar -->
             <div class="p-4 border-b border-slate-800 bg-slate-950/40 flex items-center justify-between">
                 <div class="flex items-center gap-2.5 min-w-0">
                     <div id="sidebarUserAvatar" class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow">
@@ -100,48 +106,211 @@
                         <span id="sidebarUserRoleBadge" class="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-indigo-500/20 text-indigo-300">Admin</span>
                     </div>
                 </div>
-                <button onclick="cerrarSesion()" class="p-2 text-red-400 hover:text-white hover:bg-red-600/20 rounded-lg transition-colors" title="Cerrar sesión">
+                <button onclick="cerrarSesion()" class="p-1.5 text-red-400 hover:text-white hover:bg-red-600/20 rounded-lg transition-colors" title="Cerrar sesión">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i>
                 </button>
             </div>
 
-            <!-- Footer Sidebar -->
-            <div class="p-4 border-t border-slate-800 mt-auto">
+            <!-- MENU DE NAVEGACIÓN -->
+            <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto">
+                <button onclick="App.navigate('dashboard')" id="nav-dashboard" data-perm="dashboard" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all bg-sky-600 text-white shadow-sm">
+                    <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                    <span>Panel Principal</span>
+                </button>
+                <button onclick="App.navigate('compras-nueva')" id="nav-compras-nueva" data-perm="compras-nueva" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-cart-plus w-5 text-center text-emerald-400"></i>
+                    <span>Cargar Factura / Gasto</span>
+                </button>
+
+                <!-- Desplegable Proveedores -->
+                <div id="nav-proveedores-group" class="space-y-1">
+                    <button type="button" onclick="App.toggleProveedoresNavMenu()" id="nav-proveedores-toggle" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white group">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-truck-field w-5 text-center text-teal-400"></i>
+                            <span class="font-medium">Proveedores</span>
+                        </div>
+                        <i id="nav-proveedores-chevron" class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform duration-200"></i>
+                    </button>
+                    <div id="nav-proveedores-submenu" class="pl-3 space-y-1 border-l-2 border-slate-800 ml-4 my-1">
+                        <button onclick="App.navigate('ordenes-compra')" id="nav-ordenes-compra" data-perm="ordenes-compra" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                            <i class="fa-solid fa-file-invoice w-4 text-center text-amber-400"></i>
+                            <span>Órdenes de Compra</span>
+                            <span class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">OC</span>
+                        </button>
+                        <button onclick="App.navigate('proveedores')" id="nav-proveedores" data-perm="proveedores" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                            <i class="fa-solid fa-address-book w-4 text-center text-teal-400"></i>
+                            <span>Directorio de Proveedores</span>
+                        </button>
+                        <button onclick="App.navigate('compras-historial')" id="nav-compras-historial" data-perm="compras-historial" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                            <i class="fa-solid fa-receipt w-4 text-center text-indigo-400"></i>
+                            <span>Historial de Pagos</span>
+                            <span id="badgePendingCount" class="ml-auto text-[10px] bg-red-500/30 text-red-300 px-1.5 py-0.5 rounded font-bold hidden">0</span>
+                        </button>
+                    </div>
+                </div>
+
+                <button onclick="App.navigate('productos')" id="nav-productos" data-perm="productos" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-dolly w-5 text-center text-sky-400"></i>
+                    <span>Insumos y Categorías</span>
+                </button>
+                <button onclick="App.navigate('inventarios')" id="nav-inventarios" data-perm="inventarios" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-clipboard-list w-5 text-center text-sky-400"></i>
+                    <span>Carga Inventarios (II/IF)</span>
+                </button>
+                <button onclick="App.navigate('cmv')" id="nav-cmv" data-perm="cmv" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-calculator w-5 text-center text-amber-400"></i>
+                    <span>Control CMV Mensual</span>
+                    <span class="ml-auto text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">PPP</span>
+                </button>
+                <button onclick="App.navigate('evolucion-compras')" id="nav-evolucion-compras" data-perm="evolucion-compras" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-arrow-trend-up w-5 text-center text-emerald-400"></i>
+                    <span>Evolución de Compras</span>
+                </button>
+                <button onclick="App.navigate('ajustes')" id="nav-ajustes" data-perm="ajustes" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-sliders w-5 text-center text-slate-400"></i>
+                    <span>Configuración & Backups</span>
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-slate-800 space-y-3">
+                <button onclick="App.loadDemoData()" class="w-full text-xs py-2 px-3 rounded-lg border border-dashed border-slate-600 text-slate-300 hover:text-white hover:border-sky-400 hover:bg-slate-800/80 transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-sky-400"></i>
+                    <span>Cargar Datos de Prueba</span>
+                </button>
                 <div class="text-[11px] text-slate-400 text-center flex items-center justify-between">
                     <span>Versión 4.0 (RBAC)</span>
                     <span class="inline-flex items-center gap-1 text-emerald-400">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Activo
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Seguro
                     </span>
                 </div>
             </div>
         </aside>
 
         <!-- CONTENIDO PRINCIPAL -->
-        <main class="flex-1 flex flex-col min-w-0 overflow-y-auto p-6">
-            <header class="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm flex items-center justify-between">
-                <div>
-                    <h2 class="text-xl font-bold text-slate-800">Panel de Control</h2>
-                    <p class="text-xs text-slate-500">Bienvenido a la plataforma de gestión multi-local.</p>
+        <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+            <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between no-print sticky top-0 z-30 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <button id="sidebarToggleBtn" onclick="App.toggleSidebar()" title="Mostrar/ocultar panel lateral" class="text-slate-500 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </button>
+                    <div>
+                        <h2 id="pageTitle" class="text-lg font-bold text-slate-800">Panel Principal</h2>
+                        <p id="pageSubtitle" class="text-xs text-slate-500">Resumen operativo y estado general del inventario</p>
+                    </div>
                 </div>
-                <button onclick="cerrarSesion()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-bold text-xs rounded-lg transition-colors">
-                    Cerrar Sesión
-                </button>
+
+                <div class="flex items-center gap-3">
+                    <span id="currentDateBadge" class="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200"></span>
+                    <button onclick="cerrarSesion()" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white font-bold text-xs rounded-lg transition-colors">
+                        Cerrar Sesión
+                    </button>
+                </div>
             </header>
 
-            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <p class="text-sm text-slate-600">Sesión iniciada correctamente. Selecciona un local en el panel izquierdo para comenzar a operar.</p>
-            </div>
+            <!-- VIEW: DASHBOARD -->
+            <section id="view-dashboard" class="p-6 space-y-6 animate-fade-in">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Valor Total Stock</p>
+                            <h3 id="dashTotalStockValue" class="text-2xl font-black text-slate-800 mt-1">$ 0</h3>
+                            <p class="text-xs text-slate-400 mt-1">Valuación actual al costo</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-vault"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Compras del Mes (Neto)</p>
+                            <h3 id="dashMonthPurchases" class="text-2xl font-black text-emerald-600 mt-1">$ 0</h3>
+                            <p id="dashMonthPurchasesCount" class="text-xs text-slate-500 mt-1">0 facturas cargadas</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-cart-shopping"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Cuentas a Pagar</p>
+                            <h3 id="dashPendingPayments" class="text-2xl font-black text-red-600 mt-1">$ 0</h3>
+                            <p id="dashPendingPaymentsCount" class="text-xs text-slate-500 mt-1">0 facturas pendientes</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-clock"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                                <span>Insumos con Stock Bajo o Crítico</span>
+                            </h4>
+                            <button onclick="App.navigate('productos', { filter: 'low' })" class="text-xs text-sky-600 hover:underline font-medium">Ver todos</button>
+                        </div>
+                        <div class="p-0 overflow-x-auto flex-1">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                        <th class="py-2.5 px-4 font-semibold">Insumo</th>
+                                        <th class="py-2.5 px-3 font-semibold">Proveedor</th>
+                                        <th class="py-2.5 px-3 font-semibold">Stock Actual</th>
+                                        <th class="py-2.5 px-3 font-semibold text-right">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashLowStockTable" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-clock-rotate-left text-indigo-500"></i>
+                                <span>Últimas Facturas y Estado de Pago</span>
+                            </h4>
+                            <button onclick="App.navigate('compras-historial')" class="text-xs text-sky-600 hover:underline font-medium">Ver historial</button>
+                        </div>
+                        <div class="p-0 overflow-x-auto flex-1">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="bg-slate-50 text-slate-500 border-b border-slate-100">
+                                        <th class="py-2.5 px-4 font-semibold">Fecha</th>
+                                        <th class="py-2.5 px-4 font-semibold">Proveedor</th>
+                                        <th class="py-2.5 px-3 font-semibold text-center">Estado</th>
+                                        <th class="py-2.5 px-4 font-semibold text-right">Total Factura</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashRecentPurchasesTable" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- OTRAS SECCIONES (COMPRAS, PRODUCTOS, INVENTARIOS, CMV, ETC) -->
+            <section id="view-compras-nueva" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-ordenes-compra" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-proveedores" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-inventarios" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-cmv" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-productos" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-compras-historial" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-evolucion-compras" class="p-6 space-y-6 hidden animate-fade-in"></section>
+            <section id="view-ajustes" class="p-6 space-y-6 hidden animate-fade-in"></section>
         </main>
     </div>
 
     <!-- ========================================== -->
-    <!-- ARCHIVOS JAVASCRIPT ORGANIZADOS            -->
+    <!-- CARGA DE SCRIPTS JAVASCRIPT               -->
     <!-- ========================================== -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/storage.js"></script>
-<script src="js/products.js"></script>
-<script src="js/purchases.js"></script>
-<script src="js/cmv.js"></script>
-<script src="js/app.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/purchases.js"></script>
+    <script src="js/cmv.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
