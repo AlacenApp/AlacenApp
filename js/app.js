@@ -1,11 +1,12 @@
 // ==========================================
-// 1. INICIALIZACIÓN DE SUPABASE
+// 1. INICIALIZACIÓN DE SUPABASE (Protegida)
 // ==========================================
-const SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
+var SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_xQgcJLM_vUCl6XFyjqxN8g_uufrwBgl';
 
-// Cliente de Supabase inicializado una sola vez
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Usamos window.db para evitar redeclaraciones de constantes
+window.db = window.db || window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+var db = window.db;
 
 // ==========================================
 // 2. FUNCIONES DE AUTENTICACIÓN
