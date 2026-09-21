@@ -4518,3 +4518,93 @@ db.auth.onAuthStateChange((event, session) => {
     if (cajaApp) cajaApp.style.display = 'none';
   }
 });
+// 1. Inicialización del cliente Supabase (usando la variable db)
+const SUPABASE_URL = 'https://ayyieaupiltisnrabdzn.supabase.co';
+const SUPABASE_KEY = 'TU_SUPABASE_ANON_KEY'; // Asegúrate de colocar tu anon key real aquí
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// 2. Función llamada por el botón "Ingresar" en el HTML
+async function botonLogin() {
+  const emailInput = document.getElementById('input-email');
+  const passInput = document.getElementById('input-pass');
+
+  if (!emailInput || !passInput) return;
+
+  const email = emailInput.value.trim();
+  const password = passInput.value.trim();
+
+  if (!email || !password) {
+    alert("Por favor completa correo y contraseña");
+    return;
+  }
+
+  const { error } = await db.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    alert("Error al iniciar sesión: " + error.message);
+  }
+}
+
+// 3. Función para cerrar sesión
+async function cerrarSesion() {
+  const { error } = await db.auth.signOut();
+  if (error) {
+    alert("Error al cerrar sesión: " + error.message);
+  }
+}
+
+// 4. Función para obtener e insertar locales en el selector
+async function cargarLocalesDelUsuario() {
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return;
+
+  // Consultar rol en Perfiles
+  const { data: perfil } = await db
+    .from('Perfiles')
+    .select('rol')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const rolActual = perfil ? perfil.rol : 'MANAGER';
+  let localesDisponibles = [];
+
+  if (rolActual === 'SUPERADMIN') {
+    const { data } = await db.from('Locales').select('*');
+    localesDisponibles = data || [];
+  } else {
+    const { data } = await db
+      .from('Usuarios_Locales')
+      .select('local_id, Locales(*)')
+      .eq('perfil_id', user.id);
+
+    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
+  }
+
+  // Renderizar opciones en el menú
+  const selector = document.getElementById('selectorLocales');
+  if (selector) {
+    if (localesDisponibles.length === 0) {
+      selector.innerHTML = '<option value="">No hay locales asignados</option>';
+    } else {
+      selector.innerHTML = localesDisponibles.map(local => 
+        `<option value="${local.id}">${local.nombre_local}</option>`
+      ).join('');
+    }
+  }
+}
+
+// 5. Escuchar cambios de estado de autenticación (Ocultar/Mostrar pantallas)
+db.auth.onAuthStateChange((event, session) => {
+  const cajaLogin = document.getElementById('caja-login');
+  const cajaApp = document.getElementById('caja-app');
+
+  if (session) {
+    if (cajaLogin) cajaLogin.style.display = 'none';
+    if (cajaApp) cajaApp.style.display = 'block';
+    cargarLocalesDelUsuario();
+  } else {
+    if (cajaLogin) cajaLogin.style.display = 'block';
+    if (cajaApp) cajaApp.style.display = 'none';
+  }
+});
