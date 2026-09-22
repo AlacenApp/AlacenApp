@@ -537,7 +537,6 @@ window.App = {
         var row = document.createElement('tr');
         row.className = 'purchase-item-row table-row-hover text-xs';
 
-        // Renderizado sincrónico e inmediato en pantalla
         row.innerHTML = 
             '<td class="py-2 px-2.5">' +
                 '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
@@ -561,8 +560,6 @@ window.App = {
 
         tbody.appendChild(row);
         this.calculatePurchaseTotals();
-
-        // Poblar las opciones del selector en segundo plano
         this._populateRowProducts(row, defaultProductId);
     },
 
@@ -611,7 +608,8 @@ window.App = {
     },
 
     removePurchaseRow: function(btn) {
-        var row = btn.closest('tr');
+        if (!btn) return;
+        var row = btn.closest ? btn.closest('tr') : null;
         if (row) {
             row.remove();
             this.calculatePurchaseTotals();
@@ -623,9 +621,13 @@ window.App = {
         var netSubtotal = 0;
 
         rows.forEach(function(row) {
-            var qty = parseFloat(row.querySelector('.row-qty-input')?.value) || 0;
-            var cost = parseFloat(row.querySelector('.row-cost-input')?.value) || 0;
-            var desc = parseFloat(row.querySelector('.row-discount-val')?.value) || 0;
+            var qtyInput = row.querySelector('.row-qty-input');
+            var costInput = row.querySelector('.row-cost-input');
+            var descInput = row.querySelector('.row-discount-val');
+
+            var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
+            var cost = costInput ? (parseFloat(costInput.value) || 0) : 0;
+            var desc = descInput ? (parseFloat(descInput.value) || 0) : 0;
 
             var rowSub = Math.max(0, (qty * cost) - desc);
             var subtotalEl = row.querySelector('.row-subtotal');
@@ -639,17 +641,20 @@ window.App = {
         var subtotalNetEl = document.getElementById('purchaseSubtotalNet');
         if (subtotalNetEl) subtotalNetEl.value = netSubtotal.toFixed(2);
 
-        var ivaRate = parseFloat(document.getElementById('purchaseIvaRate')?.value) || 21;
+        var ivaRateEl = document.getElementById('purchaseIvaRate');
+        var ivaRate = ivaRateEl ? (parseFloat(ivaRateEl.value) || 21) : 21;
         var ivaAmountEl = document.getElementById('purchaseIvaAmount');
         var ivaAmount = (netSubtotal * ivaRate) / 100;
         if (ivaAmountEl) ivaAmountEl.value = ivaAmount.toFixed(2);
 
-        var iibbRate = parseFloat(document.getElementById('purchaseIibbRate')?.value) || 0;
+        var iibbRateEl = document.getElementById('purchaseIibbRate');
+        var iibbRate = iibbRateEl ? (parseFloat(iibbRateEl.value) || 0) : 0;
         var iibbAmountEl = document.getElementById('purchaseIibbAmount');
         var iibbAmount = (netSubtotal * iibbRate) / 100;
         if (iibbAmountEl) iibbAmountEl.value = iibbAmount.toFixed(2);
 
-        var otherTaxes = parseFloat(document.getElementById('purchaseOtherTaxes')?.value) || 0;
+        var otherTaxesEl = document.getElementById('purchaseOtherTaxes');
+        var otherTaxes = otherTaxesEl ? (parseFloat(otherTaxesEl.value) || 0) : 0;
 
         var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
         var totalEl = document.getElementById('purchaseTotalInvoice');
@@ -664,11 +669,20 @@ window.App = {
             var supplierId = supplierSelect ? supplierSelect.value : '';
             var supplierName = (supplierSelect && supplierSelect.selectedIndex >= 0) ? supplierSelect.options[supplierSelect.selectedIndex].text : 'Sin Proveedor';
 
-            var purchaseDate = document.getElementById('purchaseDate')?.value || new Date().toISOString().split('T')[0];
-            var invoiceNum = document.getElementById('purchaseInvoiceNum')?.value || 'S/N';
-            var paymentStatus = document.getElementById('purchasePaymentStatus')?.value || 'pagada';
-            var paymentMethod = document.getElementById('purchasePaymentMethod')?.value || 'Efectivo';
-            var paymentDate = document.getElementById('purchasePaymentDate')?.value || purchaseDate;
+            var pDateEl = document.getElementById('purchaseDate');
+            var purchaseDate = pDateEl ? pDateEl.value : new Date().toISOString().split('T')[0];
+
+            var invNumEl = document.getElementById('purchaseInvoiceNum');
+            var invoiceNum = invNumEl ? invNumEl.value : 'S/N';
+
+            var pStatusEl = document.getElementById('purchasePaymentStatus');
+            var paymentStatus = pStatusEl ? pStatusEl.value : 'pagada';
+
+            var pMethodEl = document.getElementById('purchasePaymentMethod');
+            var paymentMethod = pMethodEl ? pMethodEl.value : 'Efectivo';
+
+            var pPayDateEl = document.getElementById('purchasePaymentDate');
+            var paymentDate = pPayDateEl ? pPayDateEl.value : purchaseDate;
 
             var rows = document.querySelectorAll('.purchase-item-row');
             var items = [];
@@ -677,9 +691,14 @@ window.App = {
                 var select = row.querySelector('.row-product-select');
                 var productId = select ? select.value : '';
                 var productName = (select && select.selectedIndex >= 0) ? select.options[select.selectedIndex].text : '';
-                var qty = parseFloat(row.querySelector('.row-qty-input')?.value) || 0;
-                var cost = parseFloat(row.querySelector('.row-cost-input')?.value) || 0;
-                var discountVal = parseFloat(row.querySelector('.row-discount-val')?.value) || 0;
+                
+                var qtyInput = row.querySelector('.row-qty-input');
+                var costInput = row.querySelector('.row-cost-input');
+                var descInput = row.querySelector('.row-discount-val');
+
+                var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
+                var cost = costInput ? (parseFloat(costInput.value) || 0) : 0;
+                var discountVal = descInput ? (parseFloat(descInput.value) || 0) : 0;
                 var subtotal = Math.max(0, (qty * cost) - discountVal);
 
                 if (productId && qty > 0) {
@@ -692,12 +711,23 @@ window.App = {
                 return;
             }
 
-            var netSubtotal = parseFloat(document.getElementById('purchaseSubtotalNet')?.value) || 0;
-            var ivaAmount = parseFloat(document.getElementById('purchaseIvaAmount')?.value) || 0;
-            var iibbAmount = parseFloat(document.getElementById('purchaseIibbAmount')?.value) || 0;
-            var otherTaxes = parseFloat(document.getElementById('purchaseOtherTaxes')?.value) || 0;
-            var totalInvoice = parseFloat(document.getElementById('purchaseTotalInvoice')?.value) || 0;
-            var notes = document.getElementById('purchaseNotes')?.value || '';
+            var subNetEl = document.getElementById('purchaseSubtotalNet');
+            var netSubtotal = subNetEl ? (parseFloat(subNetEl.value) || 0) : 0;
+
+            var ivaAmtEl = document.getElementById('purchaseIvaAmount');
+            var ivaAmount = ivaAmtEl ? (parseFloat(ivaAmtEl.value) || 0) : 0;
+
+            var iibbAmtEl = document.getElementById('purchaseIibbAmount');
+            var iibbAmount = iibbAmtEl ? (parseFloat(iibbAmtEl.value) || 0) : 0;
+
+            var othTaxEl = document.getElementById('purchaseOtherTaxes');
+            var otherTaxes = othTaxEl ? (parseFloat(othTaxEl.value) || 0) : 0;
+
+            var totInvEl = document.getElementById('purchaseTotalInvoice');
+            var totalInvoice = totInvEl ? (parseFloat(totInvEl.value) || 0) : 0;
+
+            var notesEl = document.getElementById('purchaseNotes');
+            var notes = notesEl ? notesEl.value : '';
 
             var purchaseData = {
                 date: purchaseDate,
