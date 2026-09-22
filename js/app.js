@@ -65,6 +65,7 @@ window.App = {
     evolucionTab: 'proveedor',
     activeUser: null,
     sidebarHidden: false,
+    _isAddingRow: false, // Bloqueo anti-rebote para filas dobles
 
     init: function() {
         var today = new Date();
@@ -504,52 +505,44 @@ window.App = {
     },
 
     // ==========================================
-    // MÓDULO COMPRAS - FORMULARIO Y RENGLONES
+    // MÓDULO COMPRAS - FLUJO OPTIMIZADO POR TECLADO
     // ==========================================
     
-    // GESTIÓN ACTIVA DE TECLADO POR RENGLÓN PARA EVITAR DOBLES FILAS
-    handleRowKeydown: function(e, element, type) {
-        if (e.key === 'Enter') {
-            // Neutralizar el comportamiento nativo del formulario HTML instantáneamente
-            e.preventDefault();
-            e.stopPropagation();
-
-            var row = element.closest('tr');
-            if (!row) return;
-
-            if (type === 'select') {
-                if (!element.value && typeof element.showPicker === 'function') {
-                    // Si está vacío, despliega la lista usando la API nativa de navegadores modernos
-                    try { element.showPicker(); } catch(err) {}
-                } else {
-                    // Si ya tiene algo seleccionado (o no soporta picker), salta a Cantidad
-                    var qty = row.querySelector('.row-qty-input');
-                    if (qty) { qty.focus(); qty.select(); }
-                }
-            } 
-            else if (type === 'qty') {
-                var isLast = (row === row.parentElement.lastElementChild);
-                if (isLast) {
-                    // Si es la última fila, crea SOLO UNA fila nueva automáticamente
-                    App.addPurchaseRow('', 1, 0, true);
-                } else {
-                    // Si no es la última, salta al selector de la fila de abajo
-                    var nextSelect = row.nextElementSibling.querySelector('.row-product-select');
-                    if (nextSelect) nextSelect.focus();
-                }
-            }
-        }
-    },
-
-    // Neutralizar cualquier 'Enter' perdido en el formulario general para que NO cree filas fantasma
+    // Controlador para evitar que la tecla Enter envíe el formulario global
     handlePurchaseFormKeydown: function(e) {
-        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
         }
     },
     handlePurchaseHeaderKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
     handlePurchaseRowKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
+
+    // Función principal para controlar los saltos de línea y creación
+    handleRowInputKeydown: function(e, element) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            var row = element.closest('tr');
+            if (!row) return;
+
+            var tbody = row.parentElement;
+            var isLast = (row === tbody.lastElementChild);
+
+            if (isLast) {
+                // Si es la última fila, CREA 1 SOLA FILA
+                App.addPurchaseRow('', 1, 0, true);
+            } else {
+                // Si no es la última, salta al selector de la fila de abajo
+                var nextRow = row.nextElementSibling;
+                if (nextRow) {
+                    var nextSelect = nextRow.querySelector('.row-product-select');
+                    if (nextSelect) nextSelect.focus();
+                }
+            }
+        }
+    },
 
     resetPurchaseForm: function() {
         var form = document.getElementById('purchaseForm');
@@ -564,13 +557,19 @@ window.App = {
                     document.getElementById('purchaseTableBody');
         if (tbody) {
             tbody.innerHTML = '';
-            // Insertar fila inicial sin forzar foco para no molestar al cargar la página
+            // Insertar fila inicial sin enfocar
             this.addPurchaseRow('', 1, 0, false);
         }
         this.calculatePurchaseTotals();
     },
 
     addPurchaseRow: function(defaultProductId, defaultQty, defaultCost, autoFocus) {
+        // BLOQUEO ANTI-REBOTE: Evita que se creen dos filas si se presiona Enter muy rápido
+        if (this._isAddingRow) return;
+        this._isAddingRow = true;
+        var self = this;
+        setTimeout(function() { self._isAddingRow = false; }, 150);
+
         if (defaultProductId === undefined) defaultProductId = '';
         if (defaultQty === undefined) defaultQty = 1;
         if (defaultCost === undefined) defaultCost = 0;
@@ -584,22 +583,22 @@ window.App = {
         var row = document.createElement('tr');
         row.className = 'purchase-item-row table-row-hover text-xs';
 
-        // Estructura HTML con eventos explícitos conectados al teclado y bloqueos
+        // Estructura HTML del renglón. Nota: el select ahora NO tiene evento onkeydown para evitar interferencias
         row.innerHTML = 
             '<td class="py-2 px-2.5">' +
-                '<select required onchange="App.updatePurchaseRowProduct(this)" onkeydown="App.handleRowKeydown(event, this, \'select\')" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
+                '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
                     '<option value="">Cargando insumos...</option>' +
                 '</select>' +
             '</td>' +
             '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowInputKeydown(event, this)" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
             '</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowInputKeydown(event, this)" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
             '</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowInputKeydown(event, this)" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
             '</td>' +
             '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
             '<td class="py-2 px-2 text-center">' +
@@ -609,15 +608,16 @@ window.App = {
         tbody.appendChild(row);
         this.calculatePurchaseTotals();
         
-        // Enfocar el selector nuevo solo si autoFocus es verdadero
-        if (autoFocus) {
-            var newSelect = row.querySelector('.row-product-select');
-            if (newSelect) {
-                setTimeout(function() { newSelect.focus(); }, 10);
-            }
-        }
-
+        // Cargar lista de opciones en segundo plano
         this._populateRowProducts(row, defaultProductId);
+
+        // Auto enfocar el selector de la nueva fila si es requerido
+        if (autoFocus) {
+            setTimeout(function() {
+                var newSelect = row.querySelector('.row-product-select');
+                if (newSelect) newSelect.focus();
+            }, 50);
+        }
     },
 
     _populateRowProducts: async function(row, defaultProductId) {
@@ -644,6 +644,7 @@ window.App = {
         }
     },
 
+    // Cuando se selecciona un insumo, el costo se actualiza y el cursor salta solo a Cantidad
     updatePurchaseRowProduct: function(selectEl) {
         var row = selectEl.closest('tr');
         if (!row) return;
@@ -660,6 +661,15 @@ window.App = {
 
             var unitTd = row.querySelector('.row-unit');
             if (unitTd) unitTd.textContent = unit;
+
+            // SALTO AUTOMÁTICO: Una vez elegido el producto, mandar foco a Cantidad
+            var qtyInput = row.querySelector('.row-qty-input');
+            if (qtyInput) {
+                setTimeout(function() {
+                    qtyInput.focus();
+                    qtyInput.select();
+                }, 10);
+            }
         }
         this.calculatePurchaseTotals();
     },
