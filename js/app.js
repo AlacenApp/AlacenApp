@@ -480,10 +480,27 @@ window.App = {
         if (typeof val === 'number') return isNaN(val) ? 0 : val;
         var str = String(val).trim();
         if (!str) return 0;
-        str = str.replace(/\$/g, '').replace(/\s/g, '');
-        if (str.indexOf(',') !== -1) {
-            str = str.replace(/\./g, '').replace(',', '.');
+
+        var directFloat = Number(str);
+        if (!isNaN(directFloat) && str.indexOf(',') === -1) {
+            return directFloat;
         }
+
+        str = str.replace(/\$/g, '').replace(/\s/g, '');
+
+        var hasDot = str.indexOf('.') !== -1;
+        var hasComma = str.indexOf(',') !== -1;
+
+        if (hasDot && hasComma) {
+            if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
+                str = str.replace(/\./g, '').replace(',', '.');
+            } else {
+                str = str.replace(/,/g, '');
+            }
+        } else if (hasComma && !hasDot) {
+            str = str.replace(',', '.');
+        }
+
         str = str.replace(/[^0-9.-]/g, '');
         var n = parseFloat(str);
         return isNaN(n) ? 0 : n;
@@ -583,21 +600,17 @@ window.App = {
             this.addPurchaseRow('', 1, 0, false);
         }
 
-        var summaryInputIds = [
-            'purchaseIvaRate', 'tasaIva', 'ivaRate',
-            'purchaseIvaAmount', 'montoIva', 'ivaAmount',
-            'purchaseIibbRate', 'tasaIibb', 'iibbRate',
-            'purchaseIibbAmount', 'montoIibb', 'iibbAmount',
-            'purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones'
-        ];
-        summaryInputIds.forEach(function(id) {
-            var el = document.getElementById(id);
-            if (el && !el.hasAttribute('data-bound-calc')) {
-                el.addEventListener('input', function() { App.calculatePurchaseTotals(); });
-                el.addEventListener('change', function() { App.calculatePurchaseTotals(); });
-                el.setAttribute('data-bound-calc', 'true');
-            }
-        });
+        var purchaseForm = document.getElementById('purchaseForm') || document.getElementById('view-compras-nueva');
+        if (purchaseForm) {
+            var allInputs = purchaseForm.querySelectorAll('input, select');
+            allInputs.forEach(function(input) {
+                if (!input.hasAttribute('data-bound-calc')) {
+                    input.addEventListener('input', function() { App.calculatePurchaseTotals(); });
+                    input.addEventListener('change', function() { App.calculatePurchaseTotals(); });
+                    input.setAttribute('data-bound-calc', 'true');
+                }
+            });
+        }
 
         this.calculatePurchaseTotals();
     },
@@ -727,9 +740,14 @@ window.App = {
         });
 
         // 1. Subtotal Neto Gravado
-        this._setValue(['purchaseSubtotalNet', 'subtotalNeto', 'purchaseSubtotal', 'subtotal'], netSubtotal, true);
+        var subtotalNetIds = [
+            'purchaseSubtotalNet', 'subtotalNeto', 'purchaseSubtotal', 'subtotal',
+            'subtotalNetoGravado', 'netoGravado', 'subtotal-neto', 'purchase-subtotal-net'
+        ];
+        this._setValue(subtotalNetIds, netSubtotal, true);
 
         // 2. IVA Rate & Monto
+        var ivaRateIds = ['purchaseIvaRate', 'tasaIva', 'ivaRate', 'porcentajeIva', 'iva-rate'];
         var ivaRateEl = document.getElementById('purchaseIvaRate') || document.getElementById('tasaIva') || document.getElementById('ivaRate');
         var ivaRate = ivaRateEl ? App._parseNum(ivaRateEl.value || ivaRateEl.textContent) : 21;
         if (ivaRateEl && (ivaRateEl.value === '' || ivaRateEl.value === undefined) && !ivaRate) {
@@ -737,21 +755,32 @@ window.App = {
         }
 
         var ivaAmount = (netSubtotal * ivaRate) / 100;
-        this._setValue(['purchaseIvaAmount', 'montoIva', 'ivaAmount'], ivaAmount, true);
+        var ivaAmountIds = ['purchaseIvaAmount', 'montoIva', 'ivaAmount', 'monto-iva', 'purchase-iva-amount'];
+        this._setValue(ivaAmountIds, ivaAmount, true);
 
         // 3. IIBB Rate & Monto
+        var iibbRateIds = ['purchaseIibbRate', 'tasaIibb', 'iibbRate', 'porcentajeIibb', 'iibb-rate'];
         var iibbRateEl = document.getElementById('purchaseIibbRate') || document.getElementById('tasaIibb') || document.getElementById('iibbRate');
         var iibbRate = iibbRateEl ? App._parseNum(iibbRateEl.value || iibbRateEl.textContent) : 0;
 
         var iibbAmount = (netSubtotal * iibbRate) / 100;
-        this._setValue(['purchaseIibbAmount', 'montoIibb', 'iibbAmount'], iibbAmount, true);
+        var iibbAmountIds = ['purchaseIibbAmount', 'montoIibb', 'iibbAmount', 'monto-iibb', 'purchase-iibb-amount'];
+        this._setValue(iibbAmountIds, iibbAmount, true);
 
         // 4. Percepciones / Otros Impuestos
-        var otherTaxes = this._getValue(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones']);
+        var otherTaxesIds = [
+            'purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones',
+            'otros-impuestos', 'impuestos', 'percepcionIibb', 'percepcionIva'
+        ];
+        var otherTaxes = this._getValue(otherTaxesIds);
 
         // 5. Total Factura Final
         var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
-        this._setValue(['purchaseTotalInvoice', 'totalFactura', 'purchaseTotal', 'total'], totalInvoice, true);
+        var totalInvoiceIds = [
+            'purchaseTotalInvoice', 'totalFactura', 'purchaseTotal', 'total',
+            'total-factura', 'purchase-total-invoice'
+        ];
+        this._setValue(totalInvoiceIds, totalInvoice, true);
     },
 
     handleSavePurchase: async function(event) {
