@@ -558,8 +558,74 @@ window.App = {
                 '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
             '</td>';
 
+        // Escuchar eventos de teclado en este renglón
+        row.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                var target = e.target;
+
+                // 1. Enter sobre la lista de Insumos
+                if (target && target.classList.contains('row-product-select')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (!target.value && typeof target.showPicker === 'function') {
+                        try { target.showPicker(); } catch(err) {}
+                    } else {
+                        var qtyInp = row.querySelector('.row-qty-input');
+                        if (qtyInp) {
+                            qtyInp.focus();
+                            qtyInp.select();
+                        }
+                    }
+                    return;
+                }
+
+                // 2. Enter sobre la Cantidad
+                if (target && target.classList.contains('row-qty-input')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    var parentTbody = row.parentElement;
+                    var isLastRow = parentTbody ? (row === parentTbody.lastElementChild) : true;
+
+                    if (isLastRow) {
+                        App.addPurchaseRow();
+                    } else {
+                        var nextRow = row.nextElementSibling;
+                        if (nextRow) {
+                            var nextSelect = nextRow.querySelector('.row-product-select');
+                            if (nextSelect) nextSelect.focus();
+                        }
+                    }
+                    return;
+                }
+
+                // 3. Enter sobre Costo o Descuento
+                if (target && (target.classList.contains('row-cost-input') || target.classList.contains('row-discount-val'))) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var pTbody = row.parentElement;
+                    if (pTbody && row === pTbody.lastElementChild) {
+                        App.addPurchaseRow();
+                    } else if (row.nextElementSibling) {
+                        var ns = row.nextElementSibling.querySelector('.row-product-select');
+                        if (ns) ns.focus();
+                    }
+                }
+            }
+        });
+
         tbody.appendChild(row);
         this.calculatePurchaseTotals();
+
+        // Posicionar cursor automáticamente en el selector de la fila recién creada
+        var selectEl = row.querySelector('.row-product-select');
+        if (selectEl) {
+            setTimeout(function() {
+                selectEl.focus();
+            }, 50);
+        }
+
         this._populateRowProducts(row, defaultProductId);
     },
 
@@ -800,7 +866,7 @@ window.App = {
     },
 
     // Handlers y Modales secundarios
-    handlePurchaseFormKeydown: function(e) { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.addPurchaseRow(); } },
+    handlePurchaseFormKeydown: function(e) { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); } },
     handlePurchaseHeaderKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
     handlePurchaseRowKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
     renderOCHistoryTable: function() {},
