@@ -276,9 +276,8 @@ window.App = {
     renderProductsTable: async function() {
         var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
-
         tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>';
-
+        
         var products = [];
         if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
             products = await ProductManager.getProducts();
@@ -320,10 +319,9 @@ window.App = {
     openProductModal: async function(productId) {
         var form = document.getElementById('productForm');
         if (form) form.reset();
-        
         document.getElementById('prodFormId').value = productId || '';
         document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo / Mercadería';
-
+        
         await this.populateDropdowns();
 
         if (productId) {
@@ -340,7 +338,6 @@ window.App = {
                 document.getElementById('prodFormSale').value = p.salePrice || 0;
             }
         }
-
         var modal = document.getElementById('productModal');
         if (modal) modal.classList.remove('hidden');
     },
@@ -354,11 +351,7 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('prodFormName');
-            if (!nameInput || !nameInput.value.trim()) {
-                alert("Por favor ingresa un nombre para el insumo.");
-                return;
-            }
-
+            if (!nameInput || !nameInput.value.trim()) { alert("Ingresa un nombre."); return; }
             var formData = {
                 id: document.getElementById('prodFormId').value || undefined,
                 code: document.getElementById('prodFormCode').value.trim(),
@@ -370,14 +363,11 @@ window.App = {
                 costPrice: document.getElementById('prodFormCost').value,
                 salePrice: document.getElementById('prodFormSale').value
             };
-
             await ProductManager.saveProduct(formData);
             this.closeProductModal();
             this.showToast('¡Insumo guardado en Supabase!', 'success');
             await this.renderProductsTable();
-        } catch (e) {
-            alert(e.message || "Error al guardar insumo");
-        }
+        } catch (e) { alert(e.message || "Error al guardar insumo"); }
     },
 
     deleteProductFromDb: async function(id) {
@@ -386,9 +376,7 @@ window.App = {
             await ProductManager.deleteProduct(id);
             this.showToast('Insumo eliminado', 'info');
             await this.renderProductsTable();
-        } catch (e) {
-            alert(e.message);
-        }
+        } catch (e) { alert(e.message); }
     },
 
     // ==========================================
@@ -397,14 +385,12 @@ window.App = {
     renderSuppliersView: async function() {
         var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
-
         tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>';
-
+        
         var suppliers = [];
         if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
             suppliers = await SupplierManager.getSuppliers();
         }
-
         var searchInput = document.getElementById('supplierSearchInput');
         var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
         if (filterVal) {
@@ -441,10 +427,8 @@ window.App = {
     openSupplierModal: async function(supplierId) {
         var form = document.getElementById('supplierForm');
         if (form) form.reset();
-
         document.getElementById('supFormId').value = supplierId || '';
         document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
-
         if (supplierId) {
             var suppliers = await SupplierManager.getSuppliers();
             var s = suppliers.find(function(item) { return item.id === supplierId; });
@@ -456,7 +440,6 @@ window.App = {
                 document.getElementById('supFormEmail').value = s.email || '';
             }
         }
-
         var modal = document.getElementById('supplierModal');
         if (modal) modal.classList.remove('hidden');
     },
@@ -470,11 +453,7 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('supFormName');
-            if (!nameInput || !nameInput.value.trim()) {
-                alert("Por favor ingresa un nombre para el proveedor.");
-                return;
-            }
-
+            if (!nameInput || !nameInput.value.trim()) { alert("Por favor ingresa un nombre para el proveedor."); return; }
             var formData = {
                 id: document.getElementById('supFormId').value || undefined,
                 name: nameInput.value.trim(),
@@ -483,14 +462,11 @@ window.App = {
                 phone: document.getElementById('supFormPhone').value.trim(),
                 email: document.getElementById('supFormEmail').value.trim()
             };
-
             await SupplierManager.saveSupplier(formData);
             this.closeSupplierModal();
             this.showToast('¡Proveedor guardado en Supabase!', 'success');
             await this.renderSuppliersView();
-        } catch (e) {
-            alert(e.message || "Error al guardar proveedor");
-        }
+        } catch (e) { alert(e.message || "Error al guardar proveedor"); }
     },
 
     deleteSupplierFromDb: async function(id) {
@@ -499,13 +475,11 @@ window.App = {
             await SupplierManager.deleteSupplier(id);
             this.showToast('Proveedor eliminado', 'info');
             await this.renderSuppliersView();
-        } catch (e) {
-            alert(e.message);
-        }
+        } catch (e) { alert(e.message); }
     },
 
     // ==========================================
-    // MÓDULO COMPRAS - TECLADO Y RENGLONES (ÁGIL)
+    // MÓDULO COMPRAS - TECLADO, RENGLONES Y TOTALES EXACTOS
     // ==========================================
 
     handleRowKeydown: function(e, element, type) {
@@ -572,6 +546,17 @@ window.App = {
             tbody.innerHTML = '';
             this.addPurchaseRow('', 1, 0, false);
         }
+
+        // Vincular recalculado al modificar Percepciones o Impuestos en el pie de factura
+        var taxIds = ['purchaseIvaRate', 'purchaseIvaAmount', 'purchaseIibbRate', 'purchaseIibbAmount', 'purchaseOtherTaxes'];
+        taxIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el && !el.hasAttribute('data-bound-totals')) {
+                el.addEventListener('input', function() { App.calculatePurchaseTotals(); });
+                el.setAttribute('data-bound-totals', 'true');
+            }
+        });
+
         this.calculatePurchaseTotals();
     },
 
@@ -638,7 +623,7 @@ window.App = {
                 products = await ProductManager.getProducts();
             }
         } catch (e) {
-            console.error("Error al cargar productos para la fila:", e);
+            console.error("Error al cargar productos:", e);
         }
 
         if (products && products.length > 0) {
@@ -681,10 +666,12 @@ window.App = {
         }
     },
 
+    // EXTRACTOR SEGURO: Suma todos los renglones netos, extrae impuestos y arma el Total Final
     calculatePurchaseTotals: function() {
         var rows = document.querySelectorAll('.purchase-item-row');
         var netSubtotal = 0;
 
+        // 1. Sumar renglones y actualizar Subtotal de Renglón
         rows.forEach(function(row) {
             var qtyInput = row.querySelector('.row-qty-input');
             var costInput = row.querySelector('.row-cost-input');
@@ -699,39 +686,57 @@ window.App = {
             if (subtotalEl) {
                 subtotalEl.textContent = '$ ' + rowSub.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
-
             netSubtotal += rowSub;
         });
 
-        function updateDisplay(id, amount, asCurrency) {
+        // Funciones auxiliares robustas para evitar fallos con símbolos $ o NaN
+        function parseVal(id) {
+            var el = document.getElementById(id);
+            if (!el) return 0;
+            var raw = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent;
+            var num = parseFloat(String(raw).replace(/[^0-9.-]+/g, ''));
+            return isNaN(num) ? 0 : num;
+        }
+
+        function setSafeDisplay(id, amount) {
             var el = document.getElementById(id);
             if (!el) return;
             if (el.tagName === 'INPUT') {
                 el.value = amount.toFixed(2);
             } else {
-                el.textContent = asCurrency ? ('$ ' + amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : amount.toFixed(2);
+                el.textContent = '$ ' + amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
         }
 
-        var ivaRateEl = document.getElementById('purchaseIvaRate');
-        var ivaRate = ivaRateEl ? (parseFloat(ivaRateEl.value || ivaRateEl.textContent) || 0) : 21;
+        // 2. Colocar Subtotal Neto
+        setSafeDisplay('purchaseSubtotalNet', netSubtotal);
+
+        // 3. Obtener e impactar Casilleros Extras (IVA, IIBB, Percepciones)
         
-        var iibbRateEl = document.getElementById('purchaseIibbRate');
-        var iibbRate = iibbRateEl ? (parseFloat(iibbRateEl.value || iibbRateEl.textContent) || 0) : 0;
-        
-        var otherTaxesEl = document.getElementById('purchaseOtherTaxes');
-        var otherTaxes = otherTaxesEl ? (parseFloat(otherTaxesEl.value || otherTaxesEl.textContent) || 0) : 0;
+        var ivaAmount = 0;
+        if (document.getElementById('purchaseIvaRate')) {
+            var ivaRate = parseVal('purchaseIvaRate');
+            ivaAmount = (netSubtotal * ivaRate) / 100;
+            setSafeDisplay('purchaseIvaAmount', ivaAmount);
+        } else {
+            ivaAmount = parseVal('purchaseIvaAmount');
+        }
 
-        updateDisplay('purchaseSubtotalNet', netSubtotal, true);
+        var iibbAmount = 0;
+        if (document.getElementById('purchaseIibbRate')) {
+            var iibbRate = parseVal('purchaseIibbRate');
+            iibbAmount = (netSubtotal * iibbRate) / 100;
+            setSafeDisplay('purchaseIibbAmount', iibbAmount);
+        } else {
+            iibbAmount = parseVal('purchaseIibbAmount');
+        }
 
-        var ivaAmount = (netSubtotal * ivaRate) / 100;
-        updateDisplay('purchaseIvaAmount', ivaAmount, true);
+        // Percepciones / Otros impuestos se tipean a mano por el usuario, aquí solo se leen
+        var otherTaxes = parseVal('purchaseOtherTaxes');
 
-        var iibbAmount = (netSubtotal * iibbRate) / 100;
-        updateDisplay('purchaseIibbAmount', iibbAmount, true);
-
+        // 4. Calcular y mostrar el TOTAL DEFINITIVO
         var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
-        updateDisplay('purchaseTotalInvoice', totalInvoice, true);
+        setSafeDisplay('purchaseTotalInvoice', totalInvoice);
     },
 
     handleSavePurchase: async function(event) {
@@ -787,17 +792,18 @@ window.App = {
                 return;
             }
 
-            var ivaRateEl = document.getElementById('purchaseIvaRate');
-            var ivaRate = ivaRateEl ? (parseFloat(ivaRateEl.value || ivaRateEl.textContent) || 0) : 21;
-            
-            var iibbRateEl = document.getElementById('purchaseIibbRate');
-            var iibbRate = iibbRateEl ? (parseFloat(iibbRateEl.value || iibbRateEl.textContent) || 0) : 0;
-            
-            var otherTaxesEl = document.getElementById('purchaseOtherTaxes');
-            var otherTaxes = otherTaxesEl ? (parseFloat(otherTaxesEl.value || otherTaxesEl.textContent) || 0) : 0;
+            function getSafeVal(id) {
+                var el = document.getElementById(id);
+                if (!el) return 0;
+                var raw = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent;
+                var num = parseFloat(String(raw).replace(/[^0-9.-]+/g, ''));
+                return isNaN(num) ? 0 : num;
+            }
 
-            var ivaAmount = (calcNetSubtotal * ivaRate) / 100;
-            var iibbAmount = (calcNetSubtotal * iibbRate) / 100;
+            // Usamos calculos seguros al momento de guardar
+            var ivaAmount = getSafeVal('purchaseIvaAmount');
+            var iibbAmount = getSafeVal('purchaseIibbAmount');
+            var otherTaxes = getSafeVal('purchaseOtherTaxes');
             var totalInvoice = calcNetSubtotal + ivaAmount + iibbAmount + otherTaxes;
 
             var notesEl = document.getElementById('purchaseNotes');
@@ -873,7 +879,6 @@ window.App = {
         }
     },
 
-    // Handlers y Modales secundarios
     renderOCHistoryTable: function() {},
     renderInventorySheets: function() {},
     renderCMVView: function() {},
