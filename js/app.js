@@ -102,6 +102,7 @@ window.App = {
         this.updateHeaderBusinessInfo();
         this.renderDashboard();
 
+        // Evita enviar el formulario principal al apretar Enter accidentalmente
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
                 if (e.target.closest('form')) { e.preventDefault(); }
@@ -187,6 +188,24 @@ window.App = {
                 ? categories.map(function(c) { return '<option value="' + c.nombre + '">' + c.nombre + '</option>'; }).join('')
                 : '<option value="Materia Prima">Materia Prima</option>';
         }
+
+        // Crear/Actualizar la lista oculta para el buscador predictivo de insumos
+        await this._updateGlobalProductDatalist();
+    },
+
+    _updateGlobalProductDatalist: async function() {
+        var dl = document.getElementById('global-products-datalist');
+        if (!dl) {
+            dl = document.createElement('datalist');
+            dl.id = 'global-products-datalist';
+            document.body.appendChild(dl);
+        }
+        var products = [];
+        if (typeof ProductManager !== 'undefined') { products = await ProductManager.getProducts(); }
+        
+        dl.innerHTML = products.map(function(p) {
+            return '<option value="' + p.name + '" data-id="' + p.id + '" data-cost="' + (p.costPrice||0) + '" data-unit="' + (p.unit||'u.') + '"></option>';
+        }).join('');
     },
 
     navigate: async function(viewId, params) {
@@ -248,7 +267,7 @@ window.App = {
     renderProductsTable: async function() {
         var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos...</td></tr>';
         
         var products = [];
         if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
@@ -281,19 +300,17 @@ window.App = {
                 '<td class="py-2.5 px-3 text-right font-bold">$ ' + (p.currentStock * p.costPrice).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>' +
                 '<td class="py-2.5 px-3 text-right">' +
-                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td>' +
-            '</tr>';
+                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td></tr>';
         }).join('');
     },
 
     openProductModal: async function(productId) {
         var form = document.getElementById('productForm');
         if (form) form.reset();
-
         document.getElementById('prodFormId').value = productId || '';
-        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo / Mercadería';
+        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo';
         await this.populateDropdowns();
 
         if (productId) {
@@ -323,11 +340,7 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('prodFormName');
-            if (!nameInput || !nameInput.value.trim()) {
-                alert("Por favor ingresa un nombre para el insumo.");
-                return;
-            }
-
+            if (!nameInput || !nameInput.value.trim()) { alert("Ingresa un nombre para el insumo."); return; }
             var formData = {
                 id: document.getElementById('prodFormId').value || undefined,
                 code: document.getElementById('prodFormCode').value.trim(),
@@ -339,14 +352,12 @@ window.App = {
                 costPrice: document.getElementById('prodFormCost').value,
                 salePrice: document.getElementById('prodFormSale').value
             };
-
             await ProductManager.saveProduct(formData);
             this.closeProductModal();
-            this.showToast('¡Insumo guardado en Supabase!', 'success');
+            this.showToast('¡Insumo guardado!', 'success');
             await this.renderProductsTable();
-        } catch (e) {
-            alert(e.message || "Error al guardar insumo");
-        }
+            await this._updateGlobalProductDatalist();
+        } catch (e) { alert(e.message || "Error al guardar"); }
     },
 
     deleteProductFromDb: async function(id) {
@@ -355,9 +366,8 @@ window.App = {
             await ProductManager.deleteProduct(id);
             this.showToast('Insumo eliminado', 'info');
             await this.renderProductsTable();
-        } catch (e) {
-            alert(e.message);
-        }
+            await this._updateGlobalProductDatalist();
+        } catch (e) { alert(e.message); }
     },
 
     // ==========================================
@@ -366,12 +376,10 @@ window.App = {
     renderSuppliersView: async function() {
         var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores...</td></tr>';
         
         var suppliers = [];
-        if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
-            suppliers = await SupplierManager.getSuppliers();
-        }
+        if (typeof SupplierManager !== 'undefined') { suppliers = await SupplierManager.getSuppliers(); }
 
         var searchInput = document.getElementById('supplierSearchInput');
         var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
@@ -385,7 +393,7 @@ window.App = {
         if (badge) badge.textContent = suppliers.length + ' proveedores';
 
         if (suppliers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores.</td></tr>';
             return;
         }
 
@@ -399,17 +407,15 @@ window.App = {
                 '<td class="py-3 px-3">' + s.paymentMethods + '</td>' +
                 '<td class="py-3 px-2 text-center">--</td>' +
                 '<td class="py-3 px-4 text-right">' +
-                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td>' +
-            '</tr>';
+                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td></tr>';
         }).join('');
     },
 
     openSupplierModal: async function(supplierId) {
         var form = document.getElementById('supplierForm');
         if (form) form.reset();
-
         document.getElementById('supFormId').value = supplierId || '';
         document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
 
@@ -437,11 +443,7 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('supFormName');
-            if (!nameInput || !nameInput.value.trim()) {
-                alert("Por favor ingresa un nombre para el proveedor.");
-                return;
-            }
-
+            if (!nameInput || !nameInput.value.trim()) { alert("Ingresa un nombre."); return; }
             var formData = {
                 id: document.getElementById('supFormId').value || undefined,
                 name: nameInput.value.trim(),
@@ -450,14 +452,11 @@ window.App = {
                 phone: document.getElementById('supFormPhone').value.trim(),
                 email: document.getElementById('supFormEmail').value.trim()
             };
-
             await SupplierManager.saveSupplier(formData);
             this.closeSupplierModal();
-            this.showToast('¡Proveedor guardado en Supabase!', 'success');
+            this.showToast('¡Proveedor guardado!', 'success');
             await this.renderSuppliersView();
-        } catch (e) {
-            alert(e.message || "Error al guardar proveedor");
-        }
+        } catch (e) { alert(e.message); }
     },
 
     deleteSupplierFromDb: async function(id) {
@@ -466,77 +465,54 @@ window.App = {
             await SupplierManager.deleteSupplier(id);
             this.showToast('Proveedor eliminado', 'info');
             await this.renderSuppliersView();
-        } catch (e) {
-            alert(e.message);
-        }
+        } catch (e) { alert(e.message); }
     },
 
     // ==========================================
-    // MÓDULO COMPRAS - TECLADO Y CÁLCULOS ROBUSTOS
+    // MÓDULO COMPRAS - MATEMÁTICA Y NAVEGACIÓN
     // ==========================================
 
-    _parseNum: function(val) {
-        if (val === null || val === undefined) return 0;
-        if (typeof val === 'number') return isNaN(val) ? 0 : val;
-        var str = String(val).trim();
-        if (!str) return 0;
+    // EXTRACTOR INTELIGENTE: Ignora formatos, comas, $ y extrae solo el número real
+    _robustParse: function(val) {
+        if (val === null || val === undefined || val === '') return 0;
+        var s = String(val).trim();
+        // Limpiamos todo excepto números, comas, puntos y guiones
+        s = s.replace(/[^0-9,.-]/g, '');
+        if (s === '') return 0;
 
-        var directFloat = Number(str);
-        if (!isNaN(directFloat) && str.indexOf(',') === -1) {
-            return directFloat;
+        // Si tiene punto y coma (ej. 1.500,50), borramos el punto y cambiamos coma por punto
+        if (s.includes(',') && s.includes('.')) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        } else if (s.includes(',')) {
+            // Si solo tiene coma (ej. 1500,50), la cambiamos por punto
+            s = s.replace(',', '.');
         }
-
-        str = str.replace(/\$/g, '').replace(/\s/g, '');
-
-        var hasDot = str.indexOf('.') !== -1;
-        var hasComma = str.indexOf(',') !== -1;
-
-        if (hasDot && hasComma) {
-            if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
-                str = str.replace(/\./g, '').replace(',', '.');
-            } else {
-                str = str.replace(/,/g, '');
-            }
-        } else if (hasComma && !hasDot) {
-            str = str.replace(',', '.');
-        }
-
-        str = str.replace(/[^0-9.-]/g, '');
-        var n = parseFloat(str);
+        var n = parseFloat(s);
         return isNaN(n) ? 0 : n;
     },
 
-    _getValue: function(idList) {
-        if (!Array.isArray(idList)) idList = [idList];
-        for (var i = 0; i < idList.length; i++) {
-            var el = document.getElementById(idList[i]);
+    _getValueGlobally: function(possibleIds) {
+        for (var i = 0; i < possibleIds.length; i++) {
+            var el = document.getElementById(possibleIds[i]);
             if (el) {
                 var raw = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent;
-                if (raw !== '' && raw !== null && raw !== undefined) {
-                    return this._parseNum(raw);
-                }
+                return this._robustParse(raw);
             }
         }
         return 0;
     },
 
-    _setValue: function(idList, val, isCurrency) {
-        if (!Array.isArray(idList)) idList = [idList];
-        var formatted = isCurrency 
-            ? ('$ ' + val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
-            : val.toFixed(2);
-
-        idList.forEach(function(id) {
+    _setValueGlobally: function(possibleIds, numberValue) {
+        var strMoneda = '$ ' + numberValue.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var strNumero = numberValue.toFixed(2);
+        
+        possibleIds.forEach(function(id) {
             var el = document.getElementById(id);
             if (!el) return;
-            if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
-                if (el.type === 'number') {
-                    el.value = val.toFixed(2);
-                } else {
-                    el.value = formatted;
-                }
+            if (el.tagName === 'INPUT') {
+                el.value = strNumero;
             } else {
-                el.textContent = formatted;
+                el.textContent = strMoneda;
             }
         });
     },
@@ -550,20 +526,9 @@ window.App = {
             if (!row) return;
             var tbody = row.parentElement;
             
-            if (type === 'select') {
-                if (!element.value) {
-                    if (typeof element.showPicker === 'function') {
-                        try { 
-                            element.showPicker(); 
-                        } catch(err) {
-                            var q1 = row.querySelector('.row-qty-input');
-                            if (q1) { setTimeout(function(){ q1.focus(); q1.select(); }, 10); }
-                        }
-                    }
-                } else {
-                    var q2 = row.querySelector('.row-qty-input');
-                    if (q2) { setTimeout(function(){ q2.focus(); q2.select(); }, 10); }
-                }
+            if (type === 'search-input') {
+                var qty1 = row.querySelector('.row-qty-input');
+                if (qty1) { setTimeout(function(){ qty1.focus(); qty1.select(); }, 10); }
             } 
             else if (type === 'qty') {
                 var cost = row.querySelector('.row-cost-input');
@@ -576,8 +541,8 @@ window.App = {
                 } else {
                     var nextRow = row.nextElementSibling;
                     if (nextRow) {
-                        var nextSelect = nextRow.querySelector('.row-product-select');
-                        if (nextSelect) { setTimeout(function(){ nextSelect.focus(); }, 10); }
+                        var nextInput = nextRow.querySelector('.row-product-input');
+                        if (nextInput) { setTimeout(function(){ nextInput.focus(); nextInput.select(); }, 10); }
                     }
                 }
             }
@@ -600,17 +565,16 @@ window.App = {
             this.addPurchaseRow('', 1, 0, false);
         }
 
-        var purchaseForm = document.getElementById('purchaseForm') || document.getElementById('view-compras-nueva');
-        if (purchaseForm) {
-            var allInputs = purchaseForm.querySelectorAll('input, select');
-            allInputs.forEach(function(input) {
-                if (!input.hasAttribute('data-bound-calc')) {
-                    input.addEventListener('input', function() { App.calculatePurchaseTotals(); });
-                    input.addEventListener('change', function() { App.calculatePurchaseTotals(); });
-                    input.setAttribute('data-bound-calc', 'true');
-                }
-            });
-        }
+        // Reconectar cálculos en vivo a TODOS los inputs de la vista
+        var pView = document.getElementById('view-compras-nueva') || document.body;
+        var summaryInputs = pView.querySelectorAll('input[id*="purchase"], input[id*="Iva"], input[id*="Iibb"], input[id*="tasa"], input[id*="monto"], input[id*="percepcion"], input[id*="impuesto"]');
+        
+        summaryInputs.forEach(function(inp) {
+            if (!inp.hasAttribute('data-bound')) {
+                inp.addEventListener('input', function() { App.calculatePurchaseTotals(); });
+                inp.setAttribute('data-bound', 'true');
+            }
+        });
 
         this.calculatePurchaseTotals();
     },
@@ -619,7 +583,7 @@ window.App = {
         if (this._isAddingRow) return;
         this._isAddingRow = true;
         var self = this;
-        setTimeout(function() { self._isAddingRow = false; }, 150);
+        setTimeout(function() { self._isAddingRow = false; }, 200);
 
         if (defaultProductId === undefined) defaultProductId = '';
         if (defaultQty === undefined) defaultQty = 1;
@@ -634,21 +598,21 @@ window.App = {
         var row = document.createElement('tr');
         row.className = 'purchase-item-row table-row-hover text-xs';
 
+        // HEMOS CAMBIADO EL <select> POR UN <input list="..."> (Búsqueda Inteligente)
         row.innerHTML = 
-            '<td class="py-2 px-2.5">' +
-                '<select required onchange="App.updatePurchaseRowProduct(this)" onkeydown="App.handleRowKeydown(event, this, \'select\')" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
-                    '<option value="">Buscando insumos...</option>' +
-                '</select>' +
+            '<td class="py-2 px-2.5 relative">' +
+                '<input type="text" list="global-products-datalist" placeholder="Buscar insumo..." onchange="App.updatePurchaseRowProduct(this)" onkeydown="App.handleRowKeydown(event, this, \'search-input\')" class="row-product-input w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500">' +
+                '<input type="hidden" class="row-product-id" value="' + defaultProductId + '">' +
             '</td>' +
             '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500">' +
             '</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'cost\')" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'cost\')" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500">' +
             '</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'desc\')" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'desc\')" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500">' +
             '</td>' +
             '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
             '<td class="py-2 px-2 text-center">' +
@@ -659,54 +623,44 @@ window.App = {
         this.calculatePurchaseTotals();
         
         if (autoFocus) {
-            var newSelect = row.querySelector('.row-product-select');
-            if (newSelect) {
-                setTimeout(function() { newSelect.focus(); }, 15);
-            }
-        }
-
-        this._populateRowProducts(row, defaultProductId);
-    },
-
-    _populateRowProducts: async function(row, defaultProductId) {
-        var select = row.querySelector('.row-product-select');
-        if (!select) return;
-
-        var products = [];
-        try {
-            if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
-                products = await ProductManager.getProducts();
-            }
-        } catch (e) { }
-
-        if (products && products.length > 0) {
-            var optionsHtml = '<option value="">-- Buscar / Seleccionar --</option>' + products.map(function(p) {
-                var selected = (p.id === defaultProductId) ? 'selected' : '';
-                return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
-            }).join('');
-            if (select.value === '') select.innerHTML = optionsHtml;
-        } else {
-            select.innerHTML = '<option value="">-- Sin insumos --</option>';
+            var searchInput = row.querySelector('.row-product-input');
+            if (searchInput) { setTimeout(function(){ searchInput.focus(); }, 15); }
         }
     },
 
-    updatePurchaseRowProduct: function(selectEl) {
-        var row = selectEl.closest('tr');
+    updatePurchaseRowProduct: function(inputEl) {
+        var row = inputEl.closest('tr');
         if (!row) return;
 
-        var selectedOption = selectEl.options[selectEl.selectedIndex];
-        if (selectedOption && selectedOption.value) {
-            var cost = selectedOption.getAttribute('data-cost') || 0;
-            var unit = selectedOption.getAttribute('data-unit') || 'u.';
-            
-            var costInput = row.querySelector('.row-cost-input');
-            if (costInput && (!costInput.value || parseFloat(costInput.value) === 0)) {
-                costInput.value = cost;
+        var val = inputEl.value;
+        var dl = document.getElementById('global-products-datalist');
+        if (!dl) return;
+        
+        var options = dl.options;
+        for(var i=0; i<options.length; i++) {
+            if (options[i].value === val) {
+                var id = options[i].getAttribute('data-id');
+                var cost = options[i].getAttribute('data-cost');
+                var unit = options[i].getAttribute('data-unit');
+
+                var hiddenId = row.querySelector('.row-product-id');
+                if (hiddenId) hiddenId.value = id;
+
+                var costInput = row.querySelector('.row-cost-input');
+                if (costInput && (!costInput.value || parseFloat(costInput.value) === 0)) {
+                    costInput.value = cost;
+                }
+
+                var unitTd = row.querySelector('.row-unit');
+                if (unitTd) unitTd.textContent = unit;
+
+                this.calculatePurchaseTotals();
+                return; // Encontrado
             }
-            var unitTd = row.querySelector('.row-unit');
-            if (unitTd) unitTd.textContent = unit;
         }
-        this.calculatePurchaseTotals();
+        // Si borró el texto o escribió algo que no existe
+        var hiddenId = row.querySelector('.row-product-id');
+        if (hiddenId) hiddenId.value = '';
     },
 
     removePurchaseRow: function(btn) {
@@ -727,9 +681,9 @@ window.App = {
             var costInput = row.querySelector('.row-cost-input');
             var descInput = row.querySelector('.row-discount-val');
 
-            var qty = qtyInput ? App._parseNum(qtyInput.value) : 0;
-            var cost = costInput ? App._parseNum(costInput.value) : 0;
-            var desc = descInput ? App._parseNum(descInput.value) : 0;
+            var qty = qtyInput ? App._robustParse(qtyInput.value) : 0;
+            var cost = costInput ? App._robustParse(costInput.value) : 0;
+            var desc = descInput ? App._robustParse(descInput.value) : 0;
 
             var rowSub = Math.max(0, (qty * cost) - desc);
             var subtotalEl = row.querySelector('.row-subtotal');
@@ -739,48 +693,32 @@ window.App = {
             netSubtotal += rowSub;
         });
 
-        // 1. Subtotal Neto Gravado
-        var subtotalNetIds = [
-            'purchaseSubtotalNet', 'subtotalNeto', 'purchaseSubtotal', 'subtotal',
-            'subtotalNetoGravado', 'netoGravado', 'subtotal-neto', 'purchase-subtotal-net'
-        ];
-        this._setValue(subtotalNetIds, netSubtotal, true);
+        // 1. Escribir Subtotal Neto
+        var subIds = ['purchaseSubtotalNet', 'subtotalNetoGravado', 'subtotalNeto', 'subtotal'];
+        this._setValueGlobally(subIds, netSubtotal);
 
-        // 2. IVA Rate & Monto
-        var ivaRateIds = ['purchaseIvaRate', 'tasaIva', 'ivaRate', 'porcentajeIva', 'iva-rate'];
-        var ivaRateEl = document.getElementById('purchaseIvaRate') || document.getElementById('tasaIva') || document.getElementById('ivaRate');
-        var ivaRate = ivaRateEl ? App._parseNum(ivaRateEl.value || ivaRateEl.textContent) : 21;
-        if (ivaRateEl && (ivaRateEl.value === '' || ivaRateEl.value === undefined) && !ivaRate) {
-            ivaRate = 21;
-        }
+        // 2. Extraer Tasas e Impuestos Manuales
+        var ivaRate = this._getValueGlobally(['purchaseIvaRate', 'tasaIva', 'ivaRate']);
+        var iibbRate = this._getValueGlobally(['purchaseIibbRate', 'tasaIibb', 'iibbRate']);
+        
+        var percepcionIva = this._getValueGlobally(['percepcionIva', 'percIva', 'purchasePercIva']);
+        var percepcionIibb = this._getValueGlobally(['percepcionIibb', 'percIibb', 'purchasePercIibb']);
+        var otrosImpuestos = this._getValueGlobally(['purchaseOtherTaxes', 'otrosImpuestos', 'impuestosInternos']);
+        var percepcionesGrales = this._getValueGlobally(['percepciones']); // Fallback si usan uno solo
 
+        // Si no se encuentra tasa IVA y está vacío en DOM, forzamos 21 para proteger
+        if (ivaRate === 0 && !document.getElementById('purchaseIvaRate')) ivaRate = 21;
+
+        // 3. Cálculos de Porcentajes
         var ivaAmount = (netSubtotal * ivaRate) / 100;
-        var ivaAmountIds = ['purchaseIvaAmount', 'montoIva', 'ivaAmount', 'monto-iva', 'purchase-iva-amount'];
-        this._setValue(ivaAmountIds, ivaAmount, true);
-
-        // 3. IIBB Rate & Monto
-        var iibbRateIds = ['purchaseIibbRate', 'tasaIibb', 'iibbRate', 'porcentajeIibb', 'iibb-rate'];
-        var iibbRateEl = document.getElementById('purchaseIibbRate') || document.getElementById('tasaIibb') || document.getElementById('iibbRate');
-        var iibbRate = iibbRateEl ? App._parseNum(iibbRateEl.value || iibbRateEl.textContent) : 0;
-
         var iibbAmount = (netSubtotal * iibbRate) / 100;
-        var iibbAmountIds = ['purchaseIibbAmount', 'montoIibb', 'iibbAmount', 'monto-iibb', 'purchase-iibb-amount'];
-        this._setValue(iibbAmountIds, iibbAmount, true);
 
-        // 4. Percepciones / Otros Impuestos
-        var otherTaxesIds = [
-            'purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones',
-            'otros-impuestos', 'impuestos', 'percepcionIibb', 'percepcionIva'
-        ];
-        var otherTaxes = this._getValue(otherTaxesIds);
+        this._setValueGlobally(['purchaseIvaAmount', 'montoIva', 'ivaAmount'], ivaAmount);
+        this._setValueGlobally(['purchaseIibbAmount', 'montoIibb', 'iibbAmount'], iibbAmount);
 
-        // 5. Total Factura Final
-        var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
-        var totalInvoiceIds = [
-            'purchaseTotalInvoice', 'totalFactura', 'purchaseTotal', 'total',
-            'total-factura', 'purchase-total-invoice'
-        ];
-        this._setValue(totalInvoiceIds, totalInvoice, true);
+        // 4. Sumar el Total
+        var totalInvoice = netSubtotal + ivaAmount + iibbAmount + percepcionIva + percepcionIibb + otrosImpuestos + percepcionesGrales;
+        this._setValueGlobally(['purchaseTotalInvoice', 'totalFactura', 'total'], totalInvoice);
     },
 
     handleSavePurchase: async function(event) {
@@ -811,17 +749,18 @@ window.App = {
             var calcNetSubtotal = 0;
 
             rows.forEach(function(row) {
-                var select = row.querySelector('.row-product-select');
-                var productId = select ? select.value : '';
-                var productName = (select && select.selectedIndex >= 0) ? select.options[select.selectedIndex].text : '';
+                var searchInput = row.querySelector('.row-product-input');
+                var hiddenId = row.querySelector('.row-product-id');
+                var productId = hiddenId ? hiddenId.value : '';
+                var productName = searchInput ? searchInput.value : '';
                 
                 var qtyInput = row.querySelector('.row-qty-input');
                 var costInput = row.querySelector('.row-cost-input');
                 var descInput = row.querySelector('.row-discount-val');
 
-                var qty = qtyInput ? App._parseNum(qtyInput.value) : 0;
-                var cost = costInput ? App._parseNum(costInput.value) : 0;
-                var discountVal = descInput ? App._parseNum(descInput.value) : 0;
+                var qty = qtyInput ? App._robustParse(qtyInput.value) : 0;
+                var cost = costInput ? App._robustParse(costInput.value) : 0;
+                var discountVal = descInput ? App._robustParse(descInput.value) : 0;
                 
                 var subtotal = Math.max(0, (qty * cost) - discountVal);
                 calcNetSubtotal += subtotal;
@@ -836,13 +775,19 @@ window.App = {
                 return;
             }
 
-            var ivaRate = this._getValue(['purchaseIvaRate', 'tasaIva', 'ivaRate']) || 21;
-            var iibbRate = this._getValue(['purchaseIibbRate', 'tasaIibb', 'iibbRate']) || 0;
-            var otherTaxes = this._getValue(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones']) || 0;
+            var ivaRate = this._getValueGlobally(['purchaseIvaRate', 'tasaIva', 'ivaRate']) || 21;
+            var iibbRate = this._getValueGlobally(['purchaseIibbRate', 'tasaIibb', 'iibbRate']) || 0;
+            
+            var percepcionIva = this._getValueGlobally(['percepcionIva', 'percIva', 'purchasePercIva']);
+            var percepcionIibb = this._getValueGlobally(['percepcionIibb', 'percIibb', 'purchasePercIibb']);
+            var otrosImpuestos = this._getValueGlobally(['purchaseOtherTaxes', 'otrosImpuestos', 'impuestosInternos']);
+            var percepcionesGrales = this._getValueGlobally(['percepciones']);
 
             var ivaAmount = (calcNetSubtotal * ivaRate) / 100;
             var iibbAmount = (calcNetSubtotal * iibbRate) / 100;
-            var totalInvoice = calcNetSubtotal + ivaAmount + iibbAmount + otherTaxes;
+            
+            var sumOthers = percepcionIva + percepcionIibb + otrosImpuestos + percepcionesGrales;
+            var totalInvoice = calcNetSubtotal + ivaAmount + iibbAmount + sumOthers;
 
             var notesEl = document.getElementById('purchaseNotes');
             var notes = notesEl ? notesEl.value : '';
@@ -858,7 +803,7 @@ window.App = {
                 netSubtotal: calcNetSubtotal,
                 ivaAmount: ivaAmount,
                 iibbAmount: iibbAmount,
-                otherTaxes: otherTaxes,
+                otherTaxes: sumOthers,
                 totalInvoice: totalInvoice,
                 notes: notes,
                 items: items
@@ -877,7 +822,7 @@ window.App = {
         var tbody = document.getElementById('purchasesHistoryTableBody');
         if (!tbody) return;
 
-        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">Cargando facturas desde Supabase...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">Cargando facturas...</td></tr>';
 
         var purchases = [];
         if (typeof PurchaseManager !== 'undefined' && PurchaseManager.getPurchases) {
@@ -885,7 +830,7 @@ window.App = {
         }
 
         if (purchases.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas para este local.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas.</td></tr>';
             return;
         }
 
@@ -900,7 +845,7 @@ window.App = {
                 '<td class="py-2.5 px-3 text-right">$ ' + p.ivaAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-4 text-right font-black">$ ' + p.totalInvoice.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-right">' +
-                    '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                    '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
                 '</td>' +
             '</tr>';
         }).join('');
