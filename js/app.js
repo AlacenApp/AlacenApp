@@ -63,9 +63,6 @@ window.App = {
     activePeriod: '',
     inventorySubTab: 'inicial',
     evolucionTab: 'proveedor',
-    supplierPurchasesChart: null,
-    productPriceChart: null,
-    pendingProductForPurchase: false,
     activeUser: null,
     sidebarHidden: false,
 
@@ -117,14 +114,12 @@ window.App = {
             await this.renderProductsTable();
         } else if (this.currentView === 'proveedores') {
             await this.renderSuppliersView();
+        } else if (this.currentView === 'compras-nueva') {
+            await this.resetPurchaseForm();
+        } else if (this.currentView === 'compras-historial') {
+            await this.renderPurchasesTable();
         } else if (this.currentView === 'dashboard') {
             this.renderDashboard();
-        } else if (this.currentView === 'compras-historial') {
-            this.renderPurchasesTable();
-        } else if (this.currentView === 'inventarios') {
-            this.renderInventorySheets();
-        } else if (this.currentView === 'cmv') {
-            this.renderCMVView();
         }
     },
 
@@ -508,14 +503,255 @@ window.App = {
         }
     },
 
-    // Modales y handlers secundarios
-    handlePurchaseFormKeydown: function(e) {},
-    handlePurchaseHeaderKeydown: function(e) {},
-    handlePurchaseRowKeydown: function(e) {},
-    resetPurchaseForm: function() {},
-    addPurchaseRow: function() {},
-    removePurchaseRow: function(btn) { if (btn && btn.closest) btn.closest('tr').remove(); },
-    renderPurchasesTable: function() {},
+    // ==========================================
+    // MÓDULO COMPRAS - FORMULARIO Y RENGLONES
+    // ==========================================
+    resetPurchaseForm: async function() {
+        var form = document.getElementById('purchaseForm');
+        if (form) form.reset();
+
+        var today = new Date().toISOString().split('T')[0];
+        var pDate = document.getElementById('purchaseDate');
+        if (pDate) pDate.value = today;
+
+        var tbody = document.getElementById('purchaseItemsTableBody');
+        if (tbody) {
+            tbody.innerHTML = '';
+            await this.addPurchaseRow();
+        }
+        this.calculatePurchaseTotals();
+    },
+
+    addPurchaseRow: async function(defaultProductId, defaultQty, defaultCost) {
+        if (defaultProductId === undefined) defaultProductId = '';
+        if (defaultQty === undefined) defaultQty = 1;
+        if (defaultCost === undefined) defaultCost = 0;
+
+        var tbody = document.getElementById('purchaseItemsTableBody');
+        if (!tbody) return;
+
+        var products = [];
+        if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
+            products = await ProductManager.getProducts();
+        }
+
+        var row = document.createElement('tr');
+        row.className = 'purchase-item-row table-row-hover text-xs';
+
+        var optionsHtml = products.map(function(p) {
+            var selected = (p.id === defaultProductId) ? 'selected' : '';
+            return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
+        }).join('');
+
+        row.innerHTML = 
+            '<td class="py-2 px-2.5">' +
+                '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
+                    '<option value="">-- Seleccionar Insumo --</option>' +
+                    optionsHtml +
+                '</select>' +
+            '</td>' +
+            '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
+            '<td class="py-2 px-2">' +
+                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+            '</td>' +
+            '<td class="py-2 px-2">' +
+                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+            '</td>' +
+            '<td class="py-2 px-2">' +
+                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+            '</td>' +
+            '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
+            '<td class="py-2 px-2 text-center">' +
+                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
+            '</td>';
+
+        tbody.appendChild(row);
+        this.calculatePurchaseTotals();
+    },
+
+    updatePurchaseRowProduct: function(selectEl) {
+        var row = selectEl.closest('tr');
+        if (!row) return;
+
+        var selectedOption = selectEl.options[selectEl.selectedIndex];
+        if (selectedOption && selectedOption.value) {
+            var cost = selectedOption.getAttribute('data-cost') || 0;
+            var unit = selectedOption.getAttribute('data-unit') || 'u.';
+            
+            var costInput = row.querySelector('.row-cost-input');
+            if (costInput && (!costInput.value || parseFloat(costInput.value) === 0)) {
+                costInput.value = cost;
+            }
+
+            var unitTd = row.querySelector('.row-unit');
+            if (unitTd) unitTd.textContent = unit;
+        }
+        this.calculatePurchaseTotals();
+    },
+
+    removePurchaseRow: function(btn) {
+        var row = btn.closest('tr');
+        if (row) {
+            row.remove();
+            this.calculatePurchaseTotals();
+        }
+    },
+
+    calculatePurchaseTotals: function() {
+        var rows = document.querySelectorAll('.purchase-item-row');
+        var netSubtotal = 0;
+
+        rows.forEach(function(row) {
+            var qty = parseFloat(row.querySelector('.row-qty-input')?.value) || 0;
+            var cost = parseFloat(row.querySelector('.row-cost-input')?.value) || 0;
+            var desc = parseFloat(row.querySelector('.row-discount-val')?.value) || 0;
+
+            var rowSub = Math.max(0, (qty * cost) - desc);
+            var subtotalEl = row.querySelector('.row-subtotal');
+            if (subtotalEl) {
+                subtotalEl.textContent = '$ ' + rowSub.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            netSubtotal += rowSub;
+        });
+
+        var subtotalNetEl = document.getElementById('purchaseSubtotalNet');
+        if (subtotalNetEl) subtotalNetEl.value = netSubtotal.toFixed(2);
+
+        var ivaRate = parseFloat(document.getElementById('purchaseIvaRate')?.value) || 21;
+        var ivaAmountEl = document.getElementById('purchaseIvaAmount');
+        var ivaAmount = (netSubtotal * ivaRate) / 100;
+        if (ivaAmountEl) ivaAmountEl.value = ivaAmount.toFixed(2);
+
+        var iibbRate = parseFloat(document.getElementById('purchaseIibbRate')?.value) || 0;
+        var iibbAmountEl = document.getElementById('purchaseIibbAmount');
+        var iibbAmount = (netSubtotal * iibbRate) / 100;
+        if (iibbAmountEl) iibbAmountEl.value = iibbAmount.toFixed(2);
+
+        var otherTaxes = parseFloat(document.getElementById('purchaseOtherTaxes')?.value) || 0;
+
+        var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
+        var totalEl = document.getElementById('purchaseTotalInvoice');
+        if (totalEl) totalEl.value = totalInvoice.toFixed(2);
+    },
+
+    handleSavePurchase: async function(event) {
+        if (event) event.preventDefault();
+
+        try {
+            var supplierSelect = document.getElementById('purchaseSupplierSelect');
+            var supplierId = supplierSelect ? supplierSelect.value : '';
+            var supplierName = (supplierSelect && supplierSelect.selectedIndex >= 0) ? supplierSelect.options[supplierSelect.selectedIndex].text : 'Sin Proveedor';
+
+            var purchaseDate = document.getElementById('purchaseDate')?.value || new Date().toISOString().split('T')[0];
+            var invoiceNum = document.getElementById('purchaseInvoiceNum')?.value || 'S/N';
+            var paymentStatus = document.getElementById('purchasePaymentStatus')?.value || 'pagada';
+            var paymentMethod = document.getElementById('purchasePaymentMethod')?.value || 'Efectivo';
+            var paymentDate = document.getElementById('purchasePaymentDate')?.value || purchaseDate;
+
+            var rows = document.querySelectorAll('.purchase-item-row');
+            var items = [];
+
+            rows.forEach(function(row) {
+                var select = row.querySelector('.row-product-select');
+                var productId = select ? select.value : '';
+                var productName = (select && select.selectedIndex >= 0) ? select.options[select.selectedIndex].text : '';
+                var qty = parseFloat(row.querySelector('.row-qty-input')?.value) || 0;
+                var cost = parseFloat(row.querySelector('.row-cost-input')?.value) || 0;
+                var discountVal = parseFloat(row.querySelector('.row-discount-val')?.value) || 0;
+                var subtotal = Math.max(0, (qty * cost) - discountVal);
+
+                if (productId && qty > 0) {
+                    items.push({ productId: productId, productName: productName, qty: qty, cost: cost, discountVal: discountVal, subtotal: subtotal });
+                }
+            });
+
+            if (items.length === 0) {
+                alert("Debes seleccionar al menos un insumo con cantidad mayor a 0.");
+                return;
+            }
+
+            var netSubtotal = parseFloat(document.getElementById('purchaseSubtotalNet')?.value) || 0;
+            var ivaAmount = parseFloat(document.getElementById('purchaseIvaAmount')?.value) || 0;
+            var iibbAmount = parseFloat(document.getElementById('purchaseIibbAmount')?.value) || 0;
+            var otherTaxes = parseFloat(document.getElementById('purchaseOtherTaxes')?.value) || 0;
+            var totalInvoice = parseFloat(document.getElementById('purchaseTotalInvoice')?.value) || 0;
+            var notes = document.getElementById('purchaseNotes')?.value || '';
+
+            var purchaseData = {
+                date: purchaseDate,
+                supplierId: supplierId,
+                supplierName: supplierName,
+                invoiceNumber: invoiceNum,
+                paymentStatus: paymentStatus,
+                paymentMethod: paymentMethod,
+                paymentDate: paymentDate,
+                netSubtotal: netSubtotal,
+                ivaAmount: ivaAmount,
+                iibbAmount: iibbAmount,
+                otherTaxes: otherTaxes,
+                totalInvoice: totalInvoice,
+                notes: notes,
+                items: items
+            };
+
+            await PurchaseManager.savePurchase(purchaseData);
+            this.showToast('¡Factura guardada y stock actualizado!', 'success');
+            await this.resetPurchaseForm();
+            await this.navigate('compras-historial');
+        } catch (e) {
+            alert(e.message || "Error al guardar la compra");
+        }
+    },
+
+    renderPurchasesTable: async function() {
+        var tbody = document.getElementById('purchasesHistoryTableBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">Cargando facturas desde Supabase...</td></tr>';
+
+        var purchases = [];
+        if (typeof PurchaseManager !== 'undefined' && PurchaseManager.getPurchases) {
+            purchases = await PurchaseManager.getPurchases();
+        }
+
+        if (purchases.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas para este local.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = purchases.map(function(p) {
+            return '<tr class="table-row-hover text-xs">' +
+                '<td class="py-2.5 px-3">' + (p.date || '-') + '</td>' +
+                '<td class="py-2.5 px-3 font-mono font-bold">' + (p.invoiceNumber || 'S/N') + '</td>' +
+                '<td class="py-2.5 px-4 font-semibold">' + (p.supplier || '-') + '</td>' +
+                '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-emerald-100 text-emerald-800">✓ ' + p.paymentStatus + '</span></td>' +
+                '<td class="py-2.5 px-3">' + (p.paymentMethod || 'Efectivo') + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + p.netSubtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + p.ivaAmount.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-4 text-right font-black">$ ' + p.totalInvoice.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right">' +
+                    '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td>' +
+            '</tr>';
+        }).join('');
+    },
+
+    deletePurchaseFromDb: async function(id) {
+        if (!confirm('¿Deseas eliminar esta compra de Supabase?')) return;
+        try {
+            await PurchaseManager.deletePurchase(id);
+            this.showToast('Compra eliminada', 'info');
+            await this.renderPurchasesTable();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
+
+    // Handlers y Modales secundarios
+    handlePurchaseFormKeydown: function(e) { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.addPurchaseRow(); } },
+    handlePurchaseHeaderKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
+    handlePurchaseRowKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
     renderOCHistoryTable: function() {},
     renderInventorySheets: function() {},
     renderCMVView: function() {},
@@ -534,7 +770,6 @@ window.App = {
     handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
     handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
     handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
-    handleSavePurchase: function(e) { e.preventDefault(); this.navigate('compras-historial'); },
     saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
     setInventorySubTab: function(tab) {},
     switchEvolucionTab: function(tab) {},
