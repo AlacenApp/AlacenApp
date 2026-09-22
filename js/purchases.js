@@ -1,128 +1,134 @@
-// ==========================================
-// MÓDULO COMPRAS Y FACTURACIÓN (SUPABASE)
-// ==========================================
-window.PurchaseManager = {
+window.PurchaseManager = window.PurchaseManager || {};
 
-  // Obtener facturas de compra del local activo
-  async getPurchases() {
-    const localId = window.App ? window.App.getLocalId() : null;
-    if (!localId) return [];
+window.PurchaseManager.savePurchase = async function(purchaseData) {
+  if (!window.db) throw new Error("No hay conexión con Supabase");
 
-    const { data, error } = await db
-      .from('Compras')
-      .select('*, Compras_Detalle(*)')
-      .eq('local_id', localId)
-      .order('fecha', { ascending: false });
+  // 1. Obtener ID del local activo
+  var localId = window.App && window.App.getLocalId ? window.App.getLocalId() : null;
 
-    if (error) {
-      console.error("Error Supabase (getPurchases):", error.message);
-      return [];
+  // 2. Insertar Encabezado de Compra
+  var insertHeader = {
+    fecha: purchaseData.date,
+    proveedor_id: purchaseData.supplierId || null,
+    nombre_proveedor: purchaseData.supplierName,
+    numero_factura: purchaseData.invoiceNumber,
+    estado_pago: purchaseData.paymentStatus,
+    medio_pago: purchaseData.paymentMethod,
+    fecha_pago: purchaseData.paymentDate,
+    subtotal_neto: purchaseData.netSubtotal,
+    monto_iva: purchaseData.ivaAmount,
+    monto_iibb: purchaseData.iibbAmount,
+    otros_impuestos: purchaseData.otherTaxes,
+    total_factura: purchaseData.totalInvoice,
+    notas: purchaseData.notes,
+    local_id: localId
+  };
+
+  var resHeader = await window.db.from('Compras').insert([insertHeader]).select().single();
+  if (resHeader.error) {
+    throw new Error("Error al guardar encabezado de compra: " + resHeader.error.message);
+  }
+
+  var compraId = resHeader.data.id;
+
+  // 3. Insertar Detalle de Renglones
+  var detalleRows = purchaseData.items.map(function(item) {
+    return {
+      compra_id: compraId,
+      producto_id: item.productId,
+      nombre_producto: item.productName,
+      cantidad: item.qty,
+      costo_unitario: item.cost,
+      descuento: item.discountVal || 0,
+      subtotal: item.subtotal
+    };
+  });
+
+  var resDetalle = await window.db.from('Compras_Detalle').insert(detalleRows);
+  if (resDetalle.error) {
+    throw new Error("Error al guardar ítems de la compra: " + resDetalle.error.message);
+  }
+
+  // 4. Incrementar Stock y Actualizar Costo de Referencia en la tabla Insumos
+  var updateCostFlag = document.getElementById('purchaseUpdateCost')?.checked ?? true;
+
+  for (var i = 0; i < purchaseData.items.length; i++) {
+    var item = purchaseData.items[i];
+    if (!item.productId) continue;
+
+    // A. Consultar el stock y costo actual del insumo
+    var tableName = 'Insumos';
+    var prodRes = await window.db.from(tableName).select('current_stock, cost_price').eq('id', item.productId).maybeSingle();
+
+    // Reintentar con tabla 'Productos' en caso de discrepancia de nombre en BD
+    if (prodRes.error && prodRes.error.code === 'PGRST204') {
+      tableName = 'Productos';
+      prodRes = await window.db.from(tableName).select('current_stock, cost_price').eq('id', item.productId).maybeSingle();
     }
 
-    return data.map(p => ({
-      id: p.id,
-      date: p.fecha,
-      supplierId: p.proveedor_id,
-      supplier: p.proveedor_nombre || 'Sin Proveedor',
-      invoiceNumber: p.numero_factura || 'S/N',
-      paymentStatus: p.estado_pago || 'pagada',
-      paymentMethod: p.metodo_pago || 'Efectivo',
-      paymentDate: p.fecha_pago || p.fecha,
-      netSubtotal: parseFloat(p.subtotal_neto) || 0,
-      ivaAmount: parseFloat(p.monto_iva) || 0,
-      iibbAmount: parseFloat(p.monto_iibb) || 0,
-      otherTaxes: parseFloat(p.otros_impuestos) || 0,
-      totalInvoice: parseFloat(p.total_factura) || 0,
-      notes: p.notas || '',
-      items: (p.Compras_Detalle || []).map(d => ({
-        productId: d.insumo_id,
-        productName: d.insumo_nombre,
-        qty: parseFloat(d.cantidad) || 0,
-        cost: parseFloat(d.costo_unitario_neto) || 0,
-        discountVal: parseFloat(d.descuento_valor) || 0,
-        subtotal: parseFloat(d.subtotal_neto) || 0
-      }))
-    }));
-  },
+    if (prodRes.data) {
+      var stockActual = parseFloat(prodRes.data.current_stock) || 0;
+      var cantidadComprada = parseFloat(item.qty) || 0;
+      var nuevoStock = stockActual + cantidadComprada;
 
-  // Registrar compra, renglones y actualizar stock en Supabase
-  async savePurchase(purchaseData) {
-    const localId = window.App ? window.App.getLocalId() : null;
-    if (!localId) throw new Error("No hay un local activo seleccionado.");
+      var updatePayload = {
+        current_stock: nuevoStock
+      };
 
-    // 1. Guardar la cabecera de la factura
-    const payloadHeader = {
-      fecha: purchaseData.date,
-      proveedor_id: purchaseData.supplierId || null,
-      proveedor_nombre: purchaseData.supplierName || 'Sin Proveedor',
-      numero_factura: purchaseData.invoiceNumber || '',
-      estado_pago: purchaseData.paymentStatus || 'pagada',
-      metodo_pago: purchaseData.paymentMethod || 'Efectivo',
-      fecha_pago: purchaseData.paymentDate || purchaseData.date,
-      subtotal_neto: parseFloat(purchaseData.netSubtotal) || 0,
-      monto_iva: parseFloat(purchaseData.ivaAmount) || 0,
-      monto_iibb: parseFloat(purchaseData.iibbAmount) || 0,
-      otros_impuestos: parseFloat(purchaseData.otherTaxes) || 0,
-      total_factura: parseFloat(purchaseData.totalInvoice) || 0,
-      notas: purchaseData.notes || '',
-      local_id: localId
-    };
+      // Si el check de "Actualizar precio de costo en catálogo" está activo
+      if (updateCostFlag && parseFloat(item.cost) > 0) {
+        updatePayload.cost_price = parseFloat(item.cost);
+      }
 
-    const { data: header, error: headerErr } = await db
-      .from('Compras')
-      .insert([payloadHeader])
-      .select();
-
-    if (headerErr) throw new Error("Error al guardar encabezado de compra: " + headerErr.message);
-
-    const purchaseId = header[0].id;
-
-    // 2. Insertar renglones e incrementar stock de insumos
-    if (purchaseData.items && purchaseData.items.length > 0) {
-      const payloadDetails = purchaseData.items.map(item => ({
-        compra_id: purchaseId,
-        insumo_id: item.productId || null,
-        insumo_nombre: item.productName || '',
-        cantidad: parseFloat(item.qty) || 0,
-        costo_unitario_neto: parseFloat(item.cost) || 0,
-        descuento_valor: parseFloat(item.discountVal) || 0,
-        subtotal_neto: parseFloat(item.subtotal) || 0
-      }));
-
-      const { error: detailErr } = await db.from('Compras_Detalle').insert(payloadDetails);
-      if (detailErr) throw new Error("Error al guardar ítems de la compra: " + detailErr.message);
-
-      // 3. Actualizar stock y costo de referencia para cada insumo
-      for (const item of purchaseData.items) {
-        if (!item.productId) continue;
-
-        // Consultar stock actual
-        const { data: prodData } = await db
-          .from('Insumos')
-          .select('stock_actual')
-          .eq('id', item.productId)
-          .maybeSingle();
-
-        const stockActual = prodData ? parseFloat(prodData.stock_actual) || 0 : 0;
-        const nuevoStock = stockActual + (parseFloat(item.qty) || 0);
-        const nuevoCosto = parseFloat(item.cost) || 0;
-
-        await db
-          .from('Insumos')
-          .update({
-            stock_actual: nuevoStock,
-            precio_costo: nuevoCosto > 0 ? nuevoCosto : undefined
-          })
-          .eq('id', item.productId);
+      var updateRes = await window.db.from(tableName).update(updatePayload).eq('id', item.productId);
+      if (updateRes.error) {
+        console.warn("Error al actualizar stock para el insumo " + item.productId + ": " + updateRes.error.message);
       }
     }
-
-    return header[0];
-  },
-
-  // Eliminar Factura de Compra
-  async deletePurchase(id) {
-    const { error } = await db.from('Compras').delete().eq('id', id);
-    if (error) throw new Error("Error al eliminar la compra: " + error.message);
   }
+
+  return resHeader.data;
+};
+
+window.PurchaseManager.getPurchases = async function() {
+  if (!window.db) return [];
+  var localId = window.App && window.App.getLocalId ? window.App.getLocalId() : null;
+
+  var query = window.db.from('Compras').select('*').order('created_at', { ascending: false });
+  if (localId) {
+    query = query.eq('local_id', localId);
+  }
+
+  var res = await query;
+  if (res.error) {
+    console.error("Error al obtener historial de compras:", res.error);
+    return [];
+  }
+
+  return (res.data || []).map(function(p) {
+    return {
+      id: p.id,
+      date: p.fecha,
+      supplier: p.nombre_proveedor,
+      invoiceNumber: p.numero_factura,
+      paymentStatus: p.estado_pago,
+      paymentMethod: p.medio_pago,
+      netSubtotal: p.subtotal_neto || 0,
+      ivaAmount: p.monto_iva || 0,
+      totalInvoice: p.total_factura || 0
+    };
+  });
+};
+
+window.PurchaseManager.deletePurchase = async function(id) {
+  if (!window.db) throw new Error("No hay conexión con Supabase");
+
+  // Opcional: Eliminar primero detalle de compras
+  await window.db.from('Compras_Detalle').delete().eq('compra_id', id);
+  var res = await window.db.from('Compras').delete().eq('id', id);
+  
+  if (res.error) {
+    throw new Error("Error al eliminar compra: " + res.error.message);
+  }
+  return true;
 };
