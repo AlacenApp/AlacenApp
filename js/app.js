@@ -10,7 +10,53 @@ if (!window.db && window.supabase) {
 var db = window.db;
 
 // ==========================================
-// 2. OBJETO PRINCIPAL DE LA APLICACIÓN (App)
+// 2. FUNCIONES DE AUTENTICACIÓN Y SESIÓN
+// ==========================================
+window.botonLogin = async function() {
+  try {
+    var emailInput = document.getElementById('input-email');
+    var passInput = document.getElementById('input-pass');
+    if (!emailInput || !passInput) return;
+
+    var email = emailInput.value.trim();
+    var password = passInput.value.trim();
+    if (!email || !password) {
+      alert("Por favor completa correo y contraseña");
+      return;
+    }
+
+    if (!window.db || !window.db.auth) {
+      alert("Error: El cliente de Supabase no se cargó correctamente.");
+      return;
+    }
+
+    var res = await window.db.auth.signInWithPassword({ email: email, password: password });
+    if (res.error) {
+      alert("Error al ingresar: " + res.error.message);
+    }
+  } catch (err) {
+    console.error("Error en login:", err);
+    alert("Ocurrió un error al ingresar: " + (err.message || err));
+  }
+};
+
+window.cerrarSesion = async function() {
+  try {
+    if (window.db && window.db.auth) {
+      await window.db.auth.signOut();
+    }
+  } catch (e) {
+    console.error("Error al salir:", e);
+  } finally {
+    var cajaLogin = document.getElementById('caja-login');
+    var cajaApp = document.getElementById('caja-app');
+    if (cajaLogin) cajaLogin.style.display = 'block';
+    if (cajaApp) cajaApp.style.display = 'none';
+  }
+};
+
+// ==========================================
+// 3. OBJETO PRINCIPAL DE LA APLICACIÓN (App)
 // ==========================================
 window.App = {
     currentView: 'dashboard',
@@ -24,31 +70,31 @@ window.App = {
     sidebarHidden: false,
 
     init: function() {
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
+        var today = new Date();
+        var yyyy = today.getFullYear();
+        var mm = String(today.getMonth() + 1).padStart(2, '0');
+        var dd = String(today.getDate()).padStart(2, '0');
         
-        this.activePeriod = `${yyyy}-${mm}`;
+        this.activePeriod = yyyy + '-' + mm;
         
-        const dateBadge = document.getElementById('currentDateBadge');
+        var dateBadge = document.getElementById('currentDateBadge');
         if (dateBadge) {
             dateBadge.textContent = today.toLocaleDateString('es-ES', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
         }
 
-        const purchaseDateInput = document.getElementById('purchaseDate');
-        if (purchaseDateInput) purchaseDateInput.value = `${yyyy}-${mm}-${dd}`;
+        var purchaseDateInput = document.getElementById('purchaseDate');
+        if (purchaseDateInput) purchaseDateInput.value = yyyy + '-' + mm + '-' + dd;
 
-        const purchasePaymentDateInput = document.getElementById('purchasePaymentDate');
-        if (purchasePaymentDateInput) purchasePaymentDateInput.value = `${yyyy}-${mm}-${dd}`;
+        var purchasePaymentDateInput = document.getElementById('purchasePaymentDate');
+        if (purchasePaymentDateInput) purchasePaymentDateInput.value = yyyy + '-' + mm + '-' + dd;
 
-        const cmvPeriodInput = document.getElementById('cmvPeriodInput');
+        var cmvPeriodInput = document.getElementById('cmvPeriodInput');
         if (cmvPeriodInput) cmvPeriodInput.value = this.activePeriod;
 
-        const invPeriodInput = document.getElementById('invPeriodInput');
+        var invPeriodInput = document.getElementById('invPeriodInput');
         if (invPeriodInput) invPeriodInput.value = this.activePeriod;
 
-        const purchasesMonthFilter = document.getElementById('purchasesMonthFilter');
+        var purchasesMonthFilter = document.getElementById('purchasesMonthFilter');
         if (purchasesMonthFilter) purchasesMonthFilter.value = this.activePeriod;
 
         this.sidebarHidden = localStorage.getItem('sidebar_hidden') === 'true';
@@ -59,44 +105,33 @@ window.App = {
         this.renderDashboard();
     },
 
-    // Obtener ID del local activo adaptado a tipo numérico (BIGINT)
     getLocalId: function() {
-        const selector = document.getElementById('selectorLocales');
+        var selector = document.getElementById('selectorLocales');
         if (!selector || !selector.value) return null;
-        const val = parseInt(selector.value, 10);
+        var val = parseInt(selector.value, 10);
         return isNaN(val) ? selector.value : val;
     },
 
-    // Actualizar vista activa ante cambios de local o menú
     renderCurrentView: async function() {
-        switch (this.currentView) {
-            case 'productos':
-                await this.renderProductsTable();
-                break;
-            case 'proveedores':
-                await this.renderSuppliersView();
-                break;
-            case 'dashboard':
-                this.renderDashboard();
-                break;
-            case 'compras-historial':
-                this.renderPurchasesTable();
-                break;
-            case 'inventarios':
-                this.renderInventorySheets();
-                break;
-            case 'cmv':
-                this.renderCMVView();
-                break;
-            default:
-                break;
+        if (this.currentView === 'productos') {
+            await this.renderProductsTable();
+        } else if (this.currentView === 'proveedores') {
+            await this.renderSuppliersView();
+        } else if (this.currentView === 'dashboard') {
+            this.renderDashboard();
+        } else if (this.currentView === 'compras-historial') {
+            this.renderPurchasesTable();
+        } else if (this.currentView === 'inventarios') {
+            this.renderInventorySheets();
+        } else if (this.currentView === 'cmv') {
+            this.renderCMVView();
         }
     },
 
     updateHeaderBusinessInfo: function() {
         if (typeof StorageManager === 'undefined') return;
-        const settings = StorageManager.getSettings();
-        const headerName = document.getElementById('headerBusinessName');
+        var settings = StorageManager.getSettings();
+        var headerName = document.getElementById('headerBusinessName');
         if (headerName) headerName.textContent = settings.businessName || 'Control de Stock & CMV';
     },
 
@@ -107,7 +142,7 @@ window.App = {
     },
 
     _applySidebarState: function(animate) {
-        const sidebar = document.getElementById('appSidebar');
+        var sidebar = document.getElementById('appSidebar');
         if (!sidebar) return;
         if (this.sidebarHidden) {
             sidebar.style.width = '0';
@@ -124,10 +159,10 @@ window.App = {
 
     toggleProveedoresNavMenu: function(forceState) {
         if (forceState === undefined) forceState = null;
-        const submenu = document.getElementById('nav-proveedores-submenu');
-        const chevron = document.getElementById('nav-proveedores-chevron');
+        var submenu = document.getElementById('nav-proveedores-submenu');
+        var chevron = document.getElementById('nav-proveedores-chevron');
         if (!submenu) return;
-        const willOpen = forceState !== null ? forceState : submenu.classList.contains('hidden');
+        var willOpen = forceState !== null ? forceState : submenu.classList.contains('hidden');
         if (willOpen) {
             submenu.classList.remove('hidden');
             if (chevron) chevron.classList.add('rotate-180');
@@ -138,8 +173,8 @@ window.App = {
     },
 
     populateDropdowns: async function() {
-        let suppliers = [];
-        let categories = [];
+        var suppliers = [];
+        var categories = [];
 
         if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
             suppliers = await SupplierManager.getSuppliers();
@@ -149,59 +184,59 @@ window.App = {
             categories = await ProductManager.getCategories();
         }
 
-        const purchaseSupSelect = document.getElementById('purchaseSupplierSelect');
+        var purchaseSupSelect = document.getElementById('purchaseSupplierSelect');
         if (purchaseSupSelect) {
             purchaseSupSelect.innerHTML = '<option value="">-- Seleccionar Proveedor --</option>' +
-                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                suppliers.map(function(s) { return '<option value="' + s.id + '">' + s.name + '</option>'; }).join('');
         }
 
-        const ocSupSelect = document.getElementById('ocSupplierSelect');
+        var ocSupSelect = document.getElementById('ocSupplierSelect');
         if (ocSupSelect) {
             ocSupSelect.innerHTML = '<option value="">-- Elige un proveedor --</option>' +
-                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                suppliers.map(function(s) { return '<option value="' + s.id + '">' + s.name + '</option>'; }).join('');
         }
 
-        const prodSupSelect = document.getElementById('prodFormSupplierSelect');
+        var prodSupSelect = document.getElementById('prodFormSupplierSelect');
         if (prodSupSelect) {
             prodSupSelect.innerHTML = '<option value="">-- Sin proveedor asignado --</option>' +
-                suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+                suppliers.map(function(s) { return '<option value="' + s.id + '">' + s.name + '</option>'; }).join('');
         }
 
-        const prodCatSelect = document.getElementById('prodFormCategorySelect');
+        var prodCatSelect = document.getElementById('prodFormCategorySelect');
         if (prodCatSelect) {
             prodCatSelect.innerHTML = categories.length > 0
-                ? categories.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join('')
+                ? categories.map(function(c) { return '<option value="' + c.nombre + '">' + c.nombre + '</option>'; }).join('')
                 : '<option value="Materia Prima">Materia Prima</option>';
         }
 
-        const prodCatFilter = document.getElementById('prodCategoryFilter');
+        var prodCatFilter = document.getElementById('prodCategoryFilter');
         if (prodCatFilter) {
             prodCatFilter.innerHTML = '<option value="">Todas las categorías</option>' +
-                categories.map(c => `<option value="${c.nombre}">${c.nombre}</option>`).join('');
+                categories.map(function(c) { return '<option value="' + c.nombre + '">' + c.nombre + '</option>'; }).join('');
         }
     },
 
     navigate: async function(viewId, params) {
         if (!params) params = {};
         this.currentView = viewId;
-        const views = document.querySelectorAll('main > section');
-        views.forEach(v => v.classList.add('hidden'));
+        var views = document.querySelectorAll('main > section');
+        views.forEach(function(v) { v.classList.add('hidden'); });
 
-        const targetView = document.getElementById(`view-${viewId}`);
+        var targetView = document.getElementById('view-' + viewId);
         if (targetView) targetView.classList.remove('hidden');
 
-        const navBtns = document.querySelectorAll('.nav-btn');
-        navBtns.forEach(btn => {
+        var navBtns = document.querySelectorAll('.nav-btn');
+        navBtns.forEach(function(btn) {
             btn.classList.remove('bg-sky-600', 'text-white', 'shadow-sm');
             btn.classList.add('text-slate-300');
         });
-        const activeNavBtn = document.getElementById(`nav-${viewId}`);
+        var activeNavBtn = document.getElementById('nav-' + viewId);
         if (activeNavBtn) {
             activeNavBtn.classList.remove('text-slate-300');
             activeNavBtn.classList.add('bg-sky-600', 'text-white', 'shadow-sm');
         }
 
-        const titles = {
+        var titles = {
             'dashboard': { title: 'Panel Principal', sub: 'Resumen operativo y estado general del inventario' },
             'compras-nueva': { title: 'Cargar Factura / Gasto', sub: 'Liquidación impositiva y estado de pago' },
             'ordenes-compra': { title: 'Órdenes de Compra', sub: 'Sugerencias de reposición por stock bajo' },
@@ -214,8 +249,8 @@ window.App = {
             'ajustes': { title: 'Configuración & Backups', sub: 'Control de usuarios y respaldos' }
         };
 
-        const pageTitle = document.getElementById('pageTitle');
-        const pageSubtitle = document.getElementById('pageSubtitle');
+        var pageTitle = document.getElementById('pageTitle');
+        var pageSubtitle = document.getElementById('pageSubtitle');
         if (pageTitle && titles[viewId]) pageTitle.textContent = titles[viewId].title;
         if (pageSubtitle && titles[viewId]) pageSubtitle.textContent = titles[viewId].sub;
 
@@ -225,68 +260,69 @@ window.App = {
 
     showToast: function(message, type) {
         if (!type) type = 'success';
-        const container = document.getElementById('toastContainer');
+        var container = document.getElementById('toastContainer');
         if (!container) return;
-        const toast = document.createElement('div');
-        toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-xl text-xs font-semibold bg-emerald-600 text-white`;
-        toast.innerHTML = `<span>${message}</span>`;
+        var toast = document.createElement('div');
+        toast.className = 'pointer-events-auto px-4 py-3 rounded-xl shadow-xl text-xs font-semibold bg-emerald-600 text-white';
+        toast.innerHTML = '<span>' + message + '</span>';
         container.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        setTimeout(function() { toast.remove(); }, 3000);
     },
 
     renderDashboard: function() {
-        const dashStockValEl = document.getElementById('dashTotalStockValue');
-        if (dashStockValEl) dashStockValEl.textContent = `$ 0.00`;
+        var dashStockValEl = document.getElementById('dashTotalStockValue');
+        if (dashStockValEl) dashStockValEl.textContent = '$ 0.00';
     },
 
     // ==========================================
-    // MÓDULO INSUMOS / PRODUCTOS
+    // MÓDULO INSUMOS
     // ==========================================
     renderProductsTable: async function() {
-        const tbody = document.getElementById('productsTableBody');
+        var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
 
-        tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>';
 
-        let products = [];
+        var products = [];
         if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
             products = await ProductManager.getProducts();
         }
 
-        const searchInput = document.getElementById('prodSearchInput');
-        const filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        var searchInput = document.getElementById('prodSearchInput');
+        var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
         if (filterVal) {
-            products = products.filter(p => p.name.toLowerCase().includes(filterVal) || (p.code && p.code.toLowerCase().includes(filterVal)));
+            products = products.filter(function(p) {
+                return p.name.toLowerCase().includes(filterVal) || (p.code && p.code.toLowerCase().includes(filterVal));
+            });
         }
 
         if (products.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos para este local.</td></tr>`;
+            tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos para este local.</td></tr>';
             return;
         }
 
-        const curr = '$';
-        tbody.innerHTML = products.map(p => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-2.5 px-3 font-mono font-bold">${p.code || '-'}</td>
-                <td class="py-2.5 px-4 font-semibold text-slate-800">${p.name}</td>
-                <td class="py-2.5 px-3 text-slate-500">${p.category || '-'}</td>
-                <td class="py-2.5 px-3">Principal</td>
-                <td class="py-2.5 px-2 text-center font-medium">${p.unit || 'u.'}</td>
-                <td class="py-2.5 px-3 text-right font-black">${p.currentStock}</td>
-                <td class="py-2.5 px-3 text-right text-slate-400">${p.minStock}</td>
-                <td class="py-2.5 px-3 text-right">${curr} ${p.costPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-right font-bold">${curr} ${(p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
-                <td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
-                <td class="py-2.5 px-3 text-right">
-                    <button onclick="App.openProductModal('${p.id}')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
-                    <button onclick="App.deleteProductFromDb('${p.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
-                </td>
-            </tr>
-        `).join('');
+        tbody.innerHTML = products.map(function(p) {
+            return '<tr class="table-row-hover text-xs">' +
+                '<td class="py-2.5 px-3 font-mono font-bold">' + (p.code || '-') + '</td>' +
+                '<td class="py-2.5 px-4 font-semibold text-slate-800">' + p.name + '</td>' +
+                '<td class="py-2.5 px-3 text-slate-500">' + (p.category || '-') + '</td>' +
+                '<td class="py-2.5 px-3">Principal</td>' +
+                '<td class="py-2.5 px-2 text-center font-medium">' + (p.unit || 'u.') + '</td>' +
+                '<td class="py-2.5 px-3 text-right font-black">' + p.currentStock + '</td>' +
+                '<td class="py-2.5 px-3 text-right text-slate-400">' + p.minStock + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + p.costPrice.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right font-bold">$ ' + (p.currentStock * p.costPrice).toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>' +
+                '<td class="py-2.5 px-3 text-right">' +
+                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td>' +
+            '</tr>';
+        }).join('');
     },
 
     openProductModal: async function(productId) {
-        const form = document.getElementById('productForm');
+        var form = document.getElementById('productForm');
         if (form) form.reset();
         
         document.getElementById('prodFormId').value = productId || '';
@@ -295,8 +331,8 @@ window.App = {
         await this.populateDropdowns();
 
         if (productId) {
-            const products = await ProductManager.getProducts();
-            const p = products.find(item => item.id === productId);
+            var products = await ProductManager.getProducts();
+            var p = products.find(function(item) { return item.id === productId; });
             if (p) {
                 document.getElementById('prodFormCode').value = p.code || '';
                 document.getElementById('prodFormName').value = p.name || '';
@@ -309,23 +345,25 @@ window.App = {
             }
         }
 
-        document.getElementById('productModal')?.classList.remove('hidden');
+        var modal = document.getElementById('productModal');
+        if (modal) modal.classList.remove('hidden');
     },
 
     closeProductModal: function() {
-        document.getElementById('productModal')?.classList.add('hidden');
+        var modal = document.getElementById('productModal');
+        if (modal) modal.classList.add('hidden');
     },
 
     handleSaveProduct: async function(event) {
         event.preventDefault();
         try {
-            const nameInput = document.getElementById('prodFormName');
+            var nameInput = document.getElementById('prodFormName');
             if (!nameInput || !nameInput.value.trim()) {
                 alert("Por favor ingresa un nombre para el insumo.");
                 return;
             }
 
-            const formData = {
+            var formData = {
                 id: document.getElementById('prodFormId').value || undefined,
                 code: document.getElementById('prodFormCode').value.trim(),
                 name: nameInput.value.trim(),
@@ -361,57 +399,59 @@ window.App = {
     // MÓDULO PROVEEDORES
     // ==========================================
     renderSuppliersView: async function() {
-        const tbody = document.getElementById('suppliersTableBody');
+        var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
 
-        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>';
 
-        let suppliers = [];
+        var suppliers = [];
         if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
             suppliers = await SupplierManager.getSuppliers();
         }
 
-        const searchInput = document.getElementById('supplierSearchInput');
-        const filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        var searchInput = document.getElementById('supplierSearchInput');
+        var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
         if (filterVal) {
-            suppliers = suppliers.filter(s => s.name.toLowerCase().includes(filterVal) || (s.cuit && s.cuit.includes(filterVal)));
+            suppliers = suppliers.filter(function(s) {
+                return s.name.toLowerCase().includes(filterVal) || (s.cuit && s.cuit.includes(filterVal));
+            });
         }
 
-        const badge = document.getElementById('suppliersTotalBadge');
-        if (badge) badge.textContent = `${suppliers.length} proveedores`;
+        var badge = document.getElementById('suppliersTotalBadge');
+        if (badge) badge.textContent = suppliers.length + ' proveedores';
 
         if (suppliers.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>`;
+            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = suppliers.map(s => `
-            <tr class="table-row-hover text-xs">
-                <td class="py-3 px-4 font-bold text-slate-900">${s.name}</td>
-                <td class="py-3 px-3 font-mono">${s.cuit || '-'}</td>
-                <td class="py-3 px-3">${s.contactPerson || '-'}</td>
-                <td class="py-3 px-3">${s.phone || '-'}</td>
-                <td class="py-3 px-3">${s.email || '-'}</td>
-                <td class="py-3 px-3">${s.paymentMethods}</td>
-                <td class="py-3 px-2 text-center">--</td>
-                <td class="py-3 px-4 text-right">
-                    <button onclick="App.openSupplierModal('${s.id}')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
-                    <button onclick="App.deleteSupplierFromDb('${s.id}')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>
-                </td>
-            </tr>
-        `).join('');
+        tbody.innerHTML = suppliers.map(function(s) {
+            return '<tr class="table-row-hover text-xs">' +
+                '<td class="py-3 px-4 font-bold text-slate-900">' + s.name + '</td>' +
+                '<td class="py-3 px-3 font-mono">' + (s.cuit || '-') + '</td>' +
+                '<td class="py-3 px-3">' + (s.contactPerson || '-') + '</td>' +
+                '<td class="py-3 px-3">' + (s.phone || '-') + '</td>' +
+                '<td class="py-3 px-3">' + (s.email || '-') + '</td>' +
+                '<td class="py-3 px-3">' + s.paymentMethods + '</td>' +
+                '<td class="py-3 px-2 text-center">--</td>' +
+                '<td class="py-3 px-4 text-right">' +
+                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td>' +
+            '</tr>';
+        }).join('');
     },
 
     openSupplierModal: async function(supplierId) {
-        const form = document.getElementById('supplierForm');
+        var form = document.getElementById('supplierForm');
         if (form) form.reset();
 
         document.getElementById('supFormId').value = supplierId || '';
         document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
 
         if (supplierId) {
-            const suppliers = await SupplierManager.getSuppliers();
-            const s = suppliers.find(item => item.id === supplierId);
+            var suppliers = await SupplierManager.getSuppliers();
+            var s = suppliers.find(function(item) { return item.id === supplierId; });
             if (s) {
                 document.getElementById('supFormName').value = s.name || '';
                 document.getElementById('supFormCuit').value = s.cuit || '';
@@ -421,23 +461,25 @@ window.App = {
             }
         }
 
-        document.getElementById('supplierModal')?.classList.remove('hidden');
+        var modal = document.getElementById('supplierModal');
+        if (modal) modal.classList.remove('hidden');
     },
 
     closeSupplierModal: function() {
-        document.getElementById('supplierModal')?.classList.add('hidden');
+        var modal = document.getElementById('supplierModal');
+        if (modal) modal.classList.add('hidden');
     },
 
     handleSaveSupplier: async function(event) {
         event.preventDefault();
         try {
-            const nameInput = document.getElementById('supFormName');
+            var nameInput = document.getElementById('supFormName');
             if (!nameInput || !nameInput.value.trim()) {
                 alert("Por favor ingresa un nombre para el proveedor.");
                 return;
             }
 
-            const formData = {
+            var formData = {
                 id: document.getElementById('supFormId').value || undefined,
                 name: nameInput.value.trim(),
                 cuit: document.getElementById('supFormCuit').value.trim(),
@@ -466,52 +508,36 @@ window.App = {
         }
     },
 
-    // ==========================================
-    // CONTROLADORES DE EVENTOS SECUNDARIOS Y MODALES
-    // ==========================================
-    handlePurchaseFormKeydown: function(e) { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.addPurchaseRow(); } },
-    handlePurchaseHeaderKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
-    handlePurchaseRowKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
+    // Modales y handlers secundarios
+    handlePurchaseFormKeydown: function(e) {},
+    handlePurchaseHeaderKeydown: function(e) {},
+    handlePurchaseRowKeydown: function(e) {},
     resetPurchaseForm: function() {},
     addPurchaseRow: function() {},
-    removePurchaseRow: function(btn) { btn.closest('tr')?.remove(); },
+    removePurchaseRow: function(btn) { if (btn && btn.closest) btn.closest('tr').remove(); },
     renderPurchasesTable: function() {},
     renderOCHistoryTable: function() {},
     renderInventorySheets: function() {},
     renderCMVView: function() {},
     renderEvolucionProveedor: function() {},
     renderUsersTable: function() {},
-    openUserModal: function() { document.getElementById('userModal')?.classList.remove('hidden'); },
-    closeUserModal: function() { document.getElementById('userModal')?.classList.add('hidden'); },
-    openSnapshotModal: function() { document.getElementById('snapshotModal')?.classList.remove('hidden'); },
-    closeSnapshotModal: function() { document.getElementById('snapshotModal')?.classList.add('hidden'); },
-    openCategoryManagerModal: function() { document.getElementById('categoryManagerModal')?.classList.remove('hidden'); },
-    closeCategoryManagerModal: function() { document.getElementById('categoryManagerModal')?.classList.add('hidden'); },
-    openPaymentModal: function() { document.getElementById('paymentModal')?.classList.remove('hidden'); },
-    closePaymentModal: function() { document.getElementById('paymentModal')?.classList.add('hidden'); },
-    openImportModal: function() { document.getElementById('importModal')?.classList.remove('hidden'); },
-    closeImportModal: function() { document.getElementById('importModal')?.classList.add('hidden'); },
+    openUserModal: function() { var m = document.getElementById('userModal'); if(m) m.classList.remove('hidden'); },
+    closeUserModal: function() { var m = document.getElementById('userModal'); if(m) m.classList.add('hidden'); },
+    openSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.remove('hidden'); },
+    closeSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.add('hidden'); },
+    openCategoryManagerModal: function() { var m = document.getElementById('categoryManagerModal'); if(m) m.classList.remove('hidden'); },
+    closeCategoryManagerModal: function() { var m = document.getElementById('categoryManagerModal'); if(m) m.classList.add('hidden'); },
+    openPaymentModal: function() { var m = document.getElementById('paymentModal'); if(m) m.classList.remove('hidden'); },
+    closePaymentModal: function() { var m = document.getElementById('paymentModal'); if(m) m.classList.add('hidden'); },
+    openImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.remove('hidden'); },
+    closeImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.add('hidden'); },
     handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
     handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
     handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
     handleSavePurchase: function(e) { e.preventDefault(); this.navigate('compras-historial'); },
     saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
-    setInventorySubTab: function(tab) {
-        this.inventorySubTab = tab;
-        const contIni = document.getElementById('subtab-content-inicial');
-        const contFin = document.getElementById('subtab-content-final');
-        const contSnap = document.getElementById('subtab-content-snapshots');
-        if (contIni) contIni.classList.toggle('hidden', tab !== 'inicial');
-        if (contFin) contFin.classList.toggle('hidden', tab !== 'final');
-        if (contSnap) contSnap.classList.toggle('hidden', tab !== 'snapshots');
-    },
-    switchEvolucionTab: function(tab) {
-        this.evolucionTab = tab;
-        const subProv = document.getElementById('subtabEvolProveedor');
-        const subIns = document.getElementById('subtabEvolInsumo');
-        if (subProv) subProv.classList.toggle('hidden', tab !== 'proveedor');
-        if (subIns) subIns.classList.toggle('hidden', tab !== 'insumo');
-    },
+    setInventorySubTab: function(tab) {},
+    switchEvolucionTab: function(tab) {},
     changePeriod: function(delta) {},
     handlePeriodChange: function(val) {},
     loadDemoData: function() { this.showToast('Datos de prueba cargados'); }
@@ -520,99 +546,85 @@ window.App = {
 window.App = window.App;
 
 // ==========================================
-// 3. FUNCIONES DE AUTENTICACIÓN SUPABASE
+// 4. CARGA DE LOCALES Y DETECTOR DE SESIÓN
 // ==========================================
-window.botonLogin = async function() {
-  const emailInput = document.getElementById('input-email');
-  const passInput = document.getElementById('input-pass');
-  if (!emailInput || !passInput) return;
-
-  const email = emailInput.value.trim();
-  const password = passInput.value.trim();
-  if (!email || !password) {
-    alert("Por favor completa correo y contraseña");
-    return;
-  }
-
-  const { error } = await db.auth.signInWithPassword({ email, password });
-  if (error) alert("Error al iniciar sesión: " + error.message);
-};
-
-window.cerrarSesion = async function() {
-  const { error } = await db.auth.signOut();
-  if (error) {
-    console.error("Error al salir:", error.message);
-  } else {
-    const cajaLogin = document.getElementById('caja-login');
-    const cajaApp = document.getElementById('caja-app');
-    if (cajaLogin) cajaLogin.style.display = 'block';
-    if (cajaApp) cajaApp.style.display = 'none';
-  }
-};
-
 async function cargarLocalesDelUsuario() {
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return [];
+  try {
+    if (!window.db || !window.db.auth) return [];
+    var authRes = await window.db.auth.getUser();
+    var user = authRes && authRes.data ? authRes.data.user : null;
+    if (!user) return [];
 
-  let localesDisponibles = [];
-  const { data: perfil } = await db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
-  const rolActual = perfil ? perfil.rol : 'SUPERADMIN';
+    var localesDisponibles = [];
 
-  if (rolActual === 'SUPERADMIN') {
-    const { data } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = data || [];
-  } else {
-    const { data } = await db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
-    localesDisponibles = data ? data.map(item => item.Locales).filter(Boolean) : [];
-  }
+    try {
+      var perfilRes = await window.db.from('Perfiles').select('rol').eq('id', user.id).maybeSingle();
+      var perfil = perfilRes ? perfilRes.data : null;
+      var rolActual = perfil ? perfil.rol : 'SUPERADMIN';
 
-  if (localesDisponibles.length === 0) {
-    const { data: todosLocales } = await db.from('Locales').select('*').order('id', { ascending: true });
-    localesDisponibles = todosLocales || [];
-  }
-
-  const selector = document.getElementById('selectorLocales');
-  if (selector) {
-    selector.innerHTML = localesDisponibles.map(local => 
-      `<option value="${local.id}">${local.nombre_local}</option>`
-    ).join('');
-
-    if (localesDisponibles.length > 0) {
-      selector.value = localesDisponibles[0].id;
+      if (rolActual === 'SUPERADMIN') {
+        var locRes = await window.db.from('Locales').select('*').order('id', { ascending: true });
+        localesDisponibles = locRes && locRes.data ? locRes.data : [];
+      } else {
+        var relRes = await window.db.from('Usuarios_Locales').select('local_id, Locales(*)').eq('perfil_id', user.id);
+        if (relRes && relRes.data) {
+          localesDisponibles = relRes.data.map(function(item) { return item.Locales; }).filter(Boolean);
+        }
+      }
+    } catch (e) {
+      console.warn("Cargando locales generales...", e);
     }
 
-    const nuevoSelector = selector.cloneNode(true);
-    selector.parentNode.replaceChild(nuevoSelector, selector);
+    if (!localesDisponibles || localesDisponibles.length === 0) {
+      var allLocRes = await window.db.from('Locales').select('*').order('id', { ascending: true });
+      localesDisponibles = allLocRes && allLocRes.data ? allLocRes.data : [];
+    }
 
-    nuevoSelector.addEventListener('change', async () => {
-      const supSearch = document.getElementById('supplierSearchInput');
-      if (supSearch) supSearch.value = '';
-
-      const prodSearch = document.getElementById('prodSearchInput');
-      if (prodSearch) prodSearch.value = '';
-
-      if (window.App) {
-        await window.App.populateDropdowns();
-        await window.App.renderCurrentView();
+    var selector = document.getElementById('selectorLocales');
+    if (selector) {
+      if (localesDisponibles.length === 0) {
+        selector.innerHTML = '<option value="">Sin locales en BD</option>';
+      } else {
+        selector.innerHTML = localesDisponibles.map(function(local) {
+          return '<option value="' + local.id + '">' + local.nombre_local + '</option>';
+        }).join('');
+        selector.value = localesDisponibles[0].id;
       }
-    });
-  }
 
-  if (window.App) {
-    await window.App.populateDropdowns();
-    await window.App.renderCurrentView();
-  }
+      var nuevoSelector = selector.cloneNode(true);
+      if (selector.parentNode) {
+        selector.parentNode.replaceChild(nuevoSelector, selector);
+      }
 
-  return localesDisponibles;
+      nuevoSelector.addEventListener('change', async function() {
+        var supSearch = document.getElementById('supplierSearchInput');
+        if (supSearch) supSearch.value = '';
+
+        var prodSearch = document.getElementById('prodSearchInput');
+        if (prodSearch) prodSearch.value = '';
+
+        if (window.App) {
+          await window.App.populateDropdowns();
+          await window.App.renderCurrentView();
+        }
+      });
+    }
+
+    if (window.App) {
+      await window.App.populateDropdowns();
+      await window.App.renderCurrentView();
+    }
+
+    return localesDisponibles;
+  } catch (err) {
+    console.error("Error al cargar locales:", err);
+  }
 }
 
-// ==========================================
-// 4. DETECTOR DE SESIÓN
-// ==========================================
-if (db && db.auth) {
-  db.auth.onAuthStateChange((event, session) => {
-    const cajaLogin = document.getElementById('caja-login');
-    const cajaApp = document.getElementById('caja-app');
+if (window.db && window.db.auth) {
+  window.db.auth.onAuthStateChange(function(event, session) {
+    var cajaLogin = document.getElementById('caja-login');
+    var cajaApp = document.getElementById('caja-app');
 
     if (session) {
       if (cajaLogin) cajaLogin.style.display = 'none';
