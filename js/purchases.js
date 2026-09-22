@@ -1,175 +1,128 @@
-/**
- * Purchases & Orders Manager
- * Carga de compras con impuestos, gestión de estado de pago (pagada/pendiente)
- * y generación de Órdenes de Compra (OC).
- */
+// ==========================================
+// MÓDULO COMPRAS Y FACTURACIÓN (SUPABASE)
+// ==========================================
+window.PurchaseManager = {
 
-class PurchaseManager {
-    static getFilteredPurchases({ month = '', supplier = '', searchTerm = '', paymentStatus = 'all' } = {}) {
-        let purchases = StorageManager.getPurchases();
+  // Obtener facturas de compra del local activo
+  async getPurchases() {
+    const localId = window.App ? window.App.getLocalId() : null;
+    if (!localId) return [];
 
-        if (month) {
-            purchases = purchases.filter(p => p.date && p.date.startsWith(month));
-        }
+    const { data, error } = await db
+      .from('Compras')
+      .select('*, Compras_Detalle(*)')
+      .eq('local_id', localId)
+      .order('fecha', { ascending: false });
 
-        if (supplier) {
-            purchases = purchases.filter(p => p.supplier && p.supplier.toLowerCase().includes(supplier.toLowerCase()));
-        }
-
-        if (paymentStatus && paymentStatus !== 'all') {
-            purchases = purchases.filter(p => (p.paymentStatus || 'pagada') === paymentStatus);
-        }
-
-        if (searchTerm.trim()) {
-            const term = searchTerm.toLowerCase().trim();
-            purchases = purchases.filter(p => 
-                (p.invoiceNumber && p.invoiceNumber.toLowerCase().includes(term)) ||
-                (p.supplier && p.supplier.toLowerCase().includes(term)) ||
-                (p.notes && p.notes.toLowerCase().includes(term)) ||
-                (p.items && p.items.some(it => it.productName.toLowerCase().includes(term)))
-            );
-        }
-
-        return purchases.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+    if (error) {
+      console.error("Error Supabase (getPurchases):", error.message);
+      return [];
     }
 
-    static registerPurchase(purchaseData) {
-        if (!purchaseData.items || purchaseData.items.length === 0) {
-            throw new Error('Debes agregar al menos un insumo o producto a la compra.');
-        }
+    return data.map(p => ({
+      id: p.id,
+      date: p.fecha,
+      supplierId: p.proveedor_id,
+      supplier: p.proveedor_nombre || 'Sin Proveedor',
+      invoiceNumber: p.numero_factura || 'S/N',
+      paymentStatus: p.estado_pago || 'pagada',
+      paymentMethod: p.metodo_pago || 'Efectivo',
+      paymentDate: p.fecha_pago || p.fecha,
+      netSubtotal: parseFloat(p.subtotal_neto) || 0,
+      ivaAmount: parseFloat(p.monto_iva) || 0,
+      iibbAmount: parseFloat(p.monto_iibb) || 0,
+      otherTaxes: parseFloat(p.otros_impuestos) || 0,
+      totalInvoice: parseFloat(p.total_factura) || 0,
+      notes: p.notas || '',
+      items: (p.Compras_Detalle || []).map(d => ({
+        productId: d.insumo_id,
+        productName: d.insumo_nombre,
+        qty: parseFloat(d.cantidad) || 0,
+        cost: parseFloat(d.costo_unitario_neto) || 0,
+        discountVal: parseFloat(d.descuento_valor) || 0,
+        subtotal: parseFloat(d.subtotal_neto) || 0
+      }))
+    }));
+  },
 
-        let calculatedNet = 0;
-        let totalDiscount = 0;
-        for (let item of purchaseData.items) {
-            if (!item.productId) throw new Error('Todos los renglones deben tener un producto seleccionado.');
-            if (isNaN(item.quantity) || item.quantity <= 0) throw new Error(`Cantidad inválida para ${item.productName}.`);
-            if (isNaN(item.unitCost) || item.unitCost < 0) throw new Error(`Costo unitario inválido para ${item.productName}.`);
-            
-            const gross = Number((item.quantity * item.unitCost).toFixed(2));
-            const discVal = Number(item.discountAmount || (item.discountPercent ? gross * (item.discountPercent / 100) : 0));
-            item.discountPercent = Number(item.discountPercent || 0);
-            item.discountAmount = Number(discVal.toFixed(2));
-            item.subtotal = Math.max(0, Number((gross - discVal).toFixed(2)));
-            calculatedNet += item.subtotal;
-            totalDiscount += item.discountAmount;
-        }
+  // Registrar compra, renglones y actualizar stock en Supabase
+  async savePurchase(purchaseData) {
+    const localId = window.App ? window.App.getLocalId() : null;
+    if (!localId) throw new Error("No hay un local activo seleccionado.");
 
-        purchaseData.netSubtotal = Number(calculatedNet.toFixed(2));
-        purchaseData.totalDiscount = Number(totalDiscount.toFixed(2));
-        
-        const ivaRate = Number(purchaseData.ivaRate || 0);
-        const ivaAmount = (purchaseData.ivaAmount !== undefined && purchaseData.ivaAmount !== null)
-            ? Number(purchaseData.ivaAmount)
-            : Number((calculatedNet * (ivaRate / 100)).toFixed(2));
+    // 1. Guardar la cabecera de la factura
+    const payloadHeader = {
+      fecha: purchaseData.date,
+      proveedor_id: purchaseData.supplierId || null,
+      proveedor_nombre: purchaseData.supplierName || 'Sin Proveedor',
+      numero_factura: purchaseData.invoiceNumber || '',
+      estado_pago: purchaseData.paymentStatus || 'pagada',
+      metodo_pago: purchaseData.paymentMethod || 'Efectivo',
+      fecha_pago: purchaseData.paymentDate || purchaseData.date,
+      subtotal_neto: parseFloat(purchaseData.netSubtotal) || 0,
+      monto_iva: parseFloat(purchaseData.ivaAmount) || 0,
+      monto_iibb: parseFloat(purchaseData.iibbAmount) || 0,
+      otros_impuestos: parseFloat(purchaseData.otherTaxes) || 0,
+      total_factura: parseFloat(purchaseData.totalInvoice) || 0,
+      notas: purchaseData.notes || '',
+      local_id: localId
+    };
 
-        const iibbAmount = Number(purchaseData.iibbAmount || 0);
-        const ivaPerception = Number(purchaseData.ivaPerception || 0);
-        const otherTaxes = Number(purchaseData.otherTaxes || 0);
+    const { data: header, error: headerErr } = await db
+      .from('Compras')
+      .insert([payloadHeader])
+      .select();
 
-        purchaseData.ivaAmount = ivaAmount;
-        purchaseData.totalInvoice = Number((calculatedNet + ivaAmount + iibbAmount + ivaPerception + otherTaxes).toFixed(2));
-        purchaseData.totalCost = purchaseData.totalInvoice;
+    if (headerErr) throw new Error("Error al guardar encabezado de compra: " + headerErr.message);
 
-        return StorageManager.addPurchase(purchaseData);
+    const purchaseId = header[0].id;
+
+    // 2. Insertar renglones e incrementar stock de insumos
+    if (purchaseData.items && purchaseData.items.length > 0) {
+      const payloadDetails = purchaseData.items.map(item => ({
+        compra_id: purchaseId,
+        insumo_id: item.productId || null,
+        insumo_nombre: item.productName || '',
+        cantidad: parseFloat(item.qty) || 0,
+        costo_unitario_neto: parseFloat(item.cost) || 0,
+        descuento_valor: parseFloat(item.discountVal) || 0,
+        subtotal_neto: parseFloat(item.subtotal) || 0
+      }));
+
+      const { error: detailErr } = await db.from('Compras_Detalle').insert(payloadDetails);
+      if (detailErr) throw new Error("Error al guardar ítems de la compra: " + detailErr.message);
+
+      // 3. Actualizar stock y costo de referencia para cada insumo
+      for (const item of purchaseData.items) {
+        if (!item.productId) continue;
+
+        // Consultar stock actual
+        const { data: prodData } = await db
+          .from('Insumos')
+          .select('stock_actual')
+          .eq('id', item.productId)
+          .maybeSingle();
+
+        const stockActual = prodData ? parseFloat(prodData.stock_actual) || 0 : 0;
+        const nuevoStock = stockActual + (parseFloat(item.qty) || 0);
+        const nuevoCosto = parseFloat(item.cost) || 0;
+
+        await db
+          .from('Insumos')
+          .update({
+            stock_actual: nuevoStock,
+            precio_costo: nuevoCosto > 0 ? nuevoCosto : undefined
+          })
+          .eq('id', item.productId);
+      }
     }
 
-    static updatePurchase(purchaseId, purchaseData) {
-        if (!purchaseData.items || purchaseData.items.length === 0) {
-            throw new Error('Debes agregar al menos un insumo o producto a la compra.');
-        }
+    return header[0];
+  },
 
-        let calculatedNet = 0;
-        let totalDiscount = 0;
-        for (let item of purchaseData.items) {
-            if (!item.productId) throw new Error('Todos los renglones deben tener un producto seleccionado.');
-            if (isNaN(item.quantity) || item.quantity <= 0) throw new Error(`Cantidad inválida para ${item.productName}.`);
-            if (isNaN(item.unitCost) || item.unitCost < 0) throw new Error(`Costo unitario inválido para ${item.productName}.`);
-            
-            const gross = Number((item.quantity * item.unitCost).toFixed(2));
-            const discVal = Number(item.discountAmount || (item.discountPercent ? gross * (item.discountPercent / 100) : 0));
-            item.discountPercent = Number(item.discountPercent || 0);
-            item.discountAmount = Number(discVal.toFixed(2));
-            item.subtotal = Math.max(0, Number((gross - discVal).toFixed(2)));
-            calculatedNet += item.subtotal;
-            totalDiscount += item.discountAmount;
-        }
-
-        purchaseData.netSubtotal = Number(calculatedNet.toFixed(2));
-        purchaseData.totalDiscount = Number(totalDiscount.toFixed(2));
-        
-        const ivaRate = Number(purchaseData.ivaRate || 0);
-        const ivaAmount = (purchaseData.ivaAmount !== undefined && purchaseData.ivaAmount !== null)
-            ? Number(purchaseData.ivaAmount)
-            : Number((calculatedNet * (ivaRate / 100)).toFixed(2));
-
-        const iibbAmount = Number(purchaseData.iibbAmount || 0);
-        const ivaPerception = Number(purchaseData.ivaPerception || 0);
-        const otherTaxes = Number(purchaseData.otherTaxes || 0);
-
-        purchaseData.ivaAmount = ivaAmount;
-        purchaseData.totalInvoice = Number((calculatedNet + ivaAmount + iibbAmount + ivaPerception + otherTaxes).toFixed(2));
-        purchaseData.totalCost = purchaseData.totalInvoice;
-
-        return StorageManager.updatePurchase(purchaseId, purchaseData);
-    }
-
-    static exportPurchasesToCSV(monthFilter = '', paymentStatusFilter = 'all') {
-        const purchases = this.getFilteredPurchases({ month: monthFilter, paymentStatus: paymentStatusFilter });
-        const settings = StorageManager.getSettings();
-        const curr = settings.currency || '$';
-
-        let csv = `REGISTRO DE FACTURAS Y ESTADO DE PAGOS - ${settings.businessName}\r\n`;
-        if (monthFilter) csv += `Periodo: ${monthFilter}\r\n`;
-        csv += `Generado el: ${new Date().toLocaleDateString()}\r\n\r\n`;
-
-        const headers = [
-            'ID Compra',
-            'Fecha Factura',
-            'Nro Comprobante',
-            'Proveedor',
-            'Estado Pago',
-            'Fecha Pago',
-            'Medio Pago',
-            'Renglones',
-            'Subtotal Neto ($)',
-            'Alicuota IVA (%)',
-            'Monto IVA ($)',
-            'Percep. IIBB ($)',
-            'Percep. IVA ($)',
-            'Otros Tributos ($)',
-            'TOTAL FACTURA ($)',
-            'Observaciones'
-        ];
-        csv += headers.map(h => `"${h}"`).join(';') + '\r\n';
-
-        purchases.forEach(p => {
-            const row = [
-                p.id,
-                p.date,
-                p.invoiceNumber || 'S/N',
-                p.supplier,
-                (p.paymentStatus === 'pendiente' ? 'Pendiente de Pago' : 'Pagada'),
-                p.paymentDate || '-',
-                p.paymentMethod || 'Efectivo',
-                (p.items || []).length,
-                p.netSubtotal || p.totalCost,
-                p.ivaRate || 0,
-                p.ivaAmount || 0,
-                p.iibbAmount || 0,
-                p.ivaPerception || 0,
-                p.otherTaxes || 0,
-                p.totalInvoice || p.totalCost,
-                p.notes || ''
-            ];
-            csv += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';') + '\r\n';
-        });
-
-        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Facturas_Pagos_${monthFilter || 'Historico'}_${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-}
+  // Eliminar Factura de Compra
+  async deletePurchase(id) {
+    const { error } = await db.from('Compras').delete().eq('id', id);
+    if (error) throw new Error("Error al eliminar la compra: " + error.message);
+  }
+};
