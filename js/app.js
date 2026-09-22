@@ -248,12 +248,23 @@ window.App = {
     renderProductsTable: async function() {
         var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos...</td></tr>';
-        var products = [];
-        if (typeof ProductManager !== 'undefined') products = await ProductManager.getProducts();
+        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>';
         
+        var products = [];
+        if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
+            products = await ProductManager.getProducts();
+        }
+
+        var searchInput = document.getElementById('prodSearchInput');
+        var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        if (filterVal) {
+            products = products.filter(function(p) {
+                return p.name.toLowerCase().includes(filterVal) || (p.code && p.code.toLowerCase().includes(filterVal));
+            });
+        }
+
         if (products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos para este local.</td></tr>';
             return;
         }
 
@@ -266,19 +277,88 @@ window.App = {
                 '<td class="py-2.5 px-2 text-center font-medium">' + (p.unit || 'u.') + '</td>' +
                 '<td class="py-2.5 px-3 text-right font-black">' + p.currentStock + '</td>' +
                 '<td class="py-2.5 px-3 text-right text-slate-400">' + p.minStock + '</td>' +
-                '<td class="py-2.5 px-3 text-right">$ ' + p.costPrice.toLocaleString('es-ES') + '</td>' +
-                '<td class="py-2.5 px-3 text-right font-bold">$ ' + (p.currentStock * p.costPrice).toLocaleString('es-ES') + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + p.costPrice.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right font-bold">$ ' + (p.currentStock * p.costPrice).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>' +
                 '<td class="py-2.5 px-3 text-right">' +
-                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td></tr>';
+                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td>' +
+            '</tr>';
         }).join('');
     },
-    openProductModal: async function(id) { document.getElementById('productModal')?.classList.remove('hidden'); },
-    closeProductModal: function() { document.getElementById('productModal')?.classList.add('hidden'); },
-    handleSaveProduct: async function(e) { e.preventDefault(); this.closeProductModal(); this.renderProductsTable(); },
-    deleteProductFromDb: async function(id) { },
+
+    openProductModal: async function(productId) {
+        var form = document.getElementById('productForm');
+        if (form) form.reset();
+
+        document.getElementById('prodFormId').value = productId || '';
+        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo / Mercadería';
+        await this.populateDropdowns();
+
+        if (productId) {
+            var products = await ProductManager.getProducts();
+            var p = products.find(function(item) { return item.id === productId; });
+            if (p) {
+                document.getElementById('prodFormCode').value = p.code || '';
+                document.getElementById('prodFormName').value = p.name || '';
+                document.getElementById('prodFormCategorySelect').value = p.category || '';
+                document.getElementById('prodFormUnit').value = p.unit || 'kg';
+                document.getElementById('prodFormStock').value = p.currentStock || 0;
+                document.getElementById('prodFormMinStock').value = p.minStock || 10;
+                document.getElementById('prodFormCost').value = p.costPrice || 0;
+                document.getElementById('prodFormSale').value = p.salePrice || 0;
+            }
+        }
+        var modal = document.getElementById('productModal');
+        if (modal) modal.classList.remove('hidden');
+    },
+
+    closeProductModal: function() {
+        var modal = document.getElementById('productModal');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    handleSaveProduct: async function(event) {
+        event.preventDefault();
+        try {
+            var nameInput = document.getElementById('prodFormName');
+            if (!nameInput || !nameInput.value.trim()) {
+                alert("Por favor ingresa un nombre para el insumo.");
+                return;
+            }
+
+            var formData = {
+                id: document.getElementById('prodFormId').value || undefined,
+                code: document.getElementById('prodFormCode').value.trim(),
+                name: nameInput.value.trim(),
+                category: document.getElementById('prodFormCategorySelect').value,
+                unit: document.getElementById('prodFormUnit').value,
+                currentStock: document.getElementById('prodFormStock').value,
+                minStock: document.getElementById('prodFormMinStock').value,
+                costPrice: document.getElementById('prodFormCost').value,
+                salePrice: document.getElementById('prodFormSale').value
+            };
+
+            await ProductManager.saveProduct(formData);
+            this.closeProductModal();
+            this.showToast('¡Insumo guardado en Supabase!', 'success');
+            await this.renderProductsTable();
+        } catch (e) {
+            alert(e.message || "Error al guardar insumo");
+        }
+    },
+
+    deleteProductFromDb: async function(id) {
+        if (!confirm('¿Deseas eliminar este insumo de Supabase?')) return;
+        try {
+            await ProductManager.deleteProduct(id);
+            this.showToast('Insumo eliminado', 'info');
+            await this.renderProductsTable();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
 
     // ==========================================
     // MÓDULO PROVEEDORES
@@ -286,36 +366,163 @@ window.App = {
     renderSuppliersView: async function() {
         var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>';
+        
         var suppliers = [];
-        if (typeof SupplierManager !== 'undefined') suppliers = await SupplierManager.getSuppliers();
+        if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
+            suppliers = await SupplierManager.getSuppliers();
+        }
+
+        var searchInput = document.getElementById('supplierSearchInput');
+        var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        if (filterVal) {
+            suppliers = suppliers.filter(function(s) {
+                return s.name.toLowerCase().includes(filterVal) || (s.cuit && s.cuit.includes(filterVal));
+            });
+        }
+
+        var badge = document.getElementById('suppliersTotalBadge');
+        if (badge) badge.textContent = suppliers.length + ' proveedores';
+
         if (suppliers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>';
             return;
         }
+
         tbody.innerHTML = suppliers.map(function(s) {
             return '<tr class="table-row-hover text-xs">' +
                 '<td class="py-3 px-4 font-bold text-slate-900">' + s.name + '</td>' +
-                '<td class="py-3 px-3">' + (s.cuit || '-') + '</td>' +
+                '<td class="py-3 px-3 font-mono">' + (s.cuit || '-') + '</td>' +
                 '<td class="py-3 px-3">' + (s.contactPerson || '-') + '</td>' +
                 '<td class="py-3 px-3">' + (s.phone || '-') + '</td>' +
                 '<td class="py-3 px-3">' + (s.email || '-') + '</td>' +
                 '<td class="py-3 px-3">' + s.paymentMethods + '</td>' +
-                '<td class="py-3 px-2">--</td>' +
+                '<td class="py-3 px-2 text-center">--</td>' +
                 '<td class="py-3 px-4 text-right">' +
-                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td></tr>';
+                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td>' +
+            '</tr>';
         }).join('');
     },
-    openSupplierModal: async function(id) { document.getElementById('supplierModal')?.classList.remove('hidden'); },
-    closeSupplierModal: function() { document.getElementById('supplierModal')?.classList.add('hidden'); },
-    handleSaveSupplier: async function(e) { e.preventDefault(); this.closeSupplierModal(); this.renderSuppliersView(); },
-    deleteSupplierFromDb: async function(id) {},
+
+    openSupplierModal: async function(supplierId) {
+        var form = document.getElementById('supplierForm');
+        if (form) form.reset();
+
+        document.getElementById('supFormId').value = supplierId || '';
+        document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
+
+        if (supplierId) {
+            var suppliers = await SupplierManager.getSuppliers();
+            var s = suppliers.find(function(item) { return item.id === supplierId; });
+            if (s) {
+                document.getElementById('supFormName').value = s.name || '';
+                document.getElementById('supFormCuit').value = s.cuit || '';
+                document.getElementById('supFormCategory').value = s.category || '';
+                document.getElementById('supFormPhone').value = s.phone || '';
+                document.getElementById('supFormEmail').value = s.email || '';
+            }
+        }
+        var modal = document.getElementById('supplierModal');
+        if (modal) modal.classList.remove('hidden');
+    },
+
+    closeSupplierModal: function() {
+        var modal = document.getElementById('supplierModal');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    handleSaveSupplier: async function(event) {
+        event.preventDefault();
+        try {
+            var nameInput = document.getElementById('supFormName');
+            if (!nameInput || !nameInput.value.trim()) {
+                alert("Por favor ingresa un nombre para el proveedor.");
+                return;
+            }
+
+            var formData = {
+                id: document.getElementById('supFormId').value || undefined,
+                name: nameInput.value.trim(),
+                cuit: document.getElementById('supFormCuit').value.trim(),
+                category: document.getElementById('supFormCategory').value.trim(),
+                phone: document.getElementById('supFormPhone').value.trim(),
+                email: document.getElementById('supFormEmail').value.trim()
+            };
+
+            await SupplierManager.saveSupplier(formData);
+            this.closeSupplierModal();
+            this.showToast('¡Proveedor guardado en Supabase!', 'success');
+            await this.renderSuppliersView();
+        } catch (e) {
+            alert(e.message || "Error al guardar proveedor");
+        }
+    },
+
+    deleteSupplierFromDb: async function(id) {
+        if (!confirm('¿Deseas eliminar este proveedor de Supabase?')) return;
+        try {
+            await SupplierManager.deleteSupplier(id);
+            this.showToast('Proveedor eliminado', 'info');
+            await this.renderSuppliersView();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
 
     // ==========================================
-    // MÓDULO COMPRAS - TECLADO Y CÁLCULOS MULTI-ID
+    // MÓDULO COMPRAS - TECLADO Y CÁLCULOS ROBUSTOS
     // ==========================================
+
+    _parseNum: function(val) {
+        if (val === null || val === undefined) return 0;
+        if (typeof val === 'number') return isNaN(val) ? 0 : val;
+        var str = String(val).trim();
+        if (!str) return 0;
+        str = str.replace(/\$/g, '').replace(/\s/g, '');
+        if (str.indexOf(',') !== -1) {
+            str = str.replace(/\./g, '').replace(',', '.');
+        }
+        str = str.replace(/[^0-9.-]/g, '');
+        var n = parseFloat(str);
+        return isNaN(n) ? 0 : n;
+    },
+
+    _getValue: function(idList) {
+        if (!Array.isArray(idList)) idList = [idList];
+        for (var i = 0; i < idList.length; i++) {
+            var el = document.getElementById(idList[i]);
+            if (el) {
+                var raw = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent;
+                if (raw !== '' && raw !== null && raw !== undefined) {
+                    return this._parseNum(raw);
+                }
+            }
+        }
+        return 0;
+    },
+
+    _setValue: function(idList, val, isCurrency) {
+        if (!Array.isArray(idList)) idList = [idList];
+        var formatted = isCurrency 
+            ? ('$ ' + val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+            : val.toFixed(2);
+
+        idList.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+                if (el.type === 'number') {
+                    el.value = val.toFixed(2);
+                } else {
+                    el.value = formatted;
+                }
+            } else {
+                el.textContent = formatted;
+            }
+        });
+    },
 
     handleRowKeydown: function(e, element, type) {
         if (e.key === 'Enter') {
@@ -329,19 +536,21 @@ window.App = {
             if (type === 'select') {
                 if (!element.value) {
                     if (typeof element.showPicker === 'function') {
-                        try { element.showPicker(); } catch(err) {
+                        try { 
+                            element.showPicker(); 
+                        } catch(err) {
                             var q1 = row.querySelector('.row-qty-input');
-                            if (q1) setTimeout(function(){ q1.focus(); q1.select(); }, 10);
+                            if (q1) { setTimeout(function(){ q1.focus(); q1.select(); }, 10); }
                         }
                     }
                 } else {
                     var q2 = row.querySelector('.row-qty-input');
-                    if (q2) setTimeout(function(){ q2.focus(); q2.select(); }, 10);
+                    if (q2) { setTimeout(function(){ q2.focus(); q2.select(); }, 10); }
                 }
             } 
             else if (type === 'qty') {
                 var cost = row.querySelector('.row-cost-input');
-                if (cost) setTimeout(function(){ cost.focus(); cost.select(); }, 10);
+                if (cost) { setTimeout(function(){ cost.focus(); cost.select(); }, 10); }
             }
             else if (type === 'cost' || type === 'desc') {
                 var isLastRow = (row === tbody.lastElementChild);
@@ -351,7 +560,7 @@ window.App = {
                     var nextRow = row.nextElementSibling;
                     if (nextRow) {
                         var nextSelect = nextRow.querySelector('.row-product-select');
-                        if (nextSelect) setTimeout(function(){ nextSelect.focus(); }, 10);
+                        if (nextSelect) { setTimeout(function(){ nextSelect.focus(); }, 10); }
                     }
                 }
             }
@@ -397,7 +606,7 @@ window.App = {
         if (this._isAddingRow) return;
         this._isAddingRow = true;
         var self = this;
-        setTimeout(function() { self._isAddingRow = false; }, 200);
+        setTimeout(function() { self._isAddingRow = false; }, 150);
 
         if (defaultProductId === undefined) defaultProductId = '';
         if (defaultQty === undefined) defaultQty = 1;
@@ -438,7 +647,9 @@ window.App = {
         
         if (autoFocus) {
             var newSelect = row.querySelector('.row-product-select');
-            if (newSelect) setTimeout(function() { newSelect.focus(); }, 10);
+            if (newSelect) {
+                setTimeout(function() { newSelect.focus(); }, 15);
+            }
         }
 
         this._populateRowProducts(row, defaultProductId);
@@ -494,51 +705,6 @@ window.App = {
         }
     },
 
-    // EXTRACTORES MATEMÁTICOS MULTI-ID
-    _getElementNumber: function(idArray) {
-        if (!Array.isArray(idArray)) idArray = [idArray];
-        for (var i = 0; i < idArray.length; i++) {
-            var el = document.getElementById(idArray[i]);
-            if (el) {
-                if (el.tagName === 'INPUT' && (el.type === 'number' || el.type === 'range')) {
-                    var val = parseFloat(el.value);
-                    if (!isNaN(val)) return val;
-                }
-                var raw = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent;
-                if (raw) {
-                    var str = String(raw).trim();
-                    if (str.indexOf(',') !== -1) {
-                        str = str.replace(/\./g, '').replace(',', '.');
-                    }
-                    str = str.replace(/[^0-9.-]/g, '');
-                    var num = parseFloat(str);
-                    if (!isNaN(num)) return num;
-                }
-            }
-        }
-        return 0;
-    },
-
-    _setElementValue: function(idArray, numValue, isCurrency) {
-        if (!Array.isArray(idArray)) idArray = [idArray];
-        var formattedCurrency = '$ ' + numValue.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        var formattedNumber = numValue.toFixed(2);
-
-        idArray.forEach(function(id) {
-            var el = document.getElementById(id);
-            if (!el) return;
-            if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
-                if (el.type === 'number') {
-                    el.value = numValue.toFixed(2);
-                } else {
-                    el.value = isCurrency ? formattedCurrency : formattedNumber;
-                }
-            } else {
-                el.textContent = isCurrency ? formattedCurrency : formattedNumber;
-            }
-        });
-    },
-
     calculatePurchaseTotals: function() {
         var rows = document.querySelectorAll('.purchase-item-row');
         var netSubtotal = 0;
@@ -548,9 +714,9 @@ window.App = {
             var costInput = row.querySelector('.row-cost-input');
             var descInput = row.querySelector('.row-discount-val');
 
-            var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
-            var cost = costInput ? (parseFloat(costInput.value) || 0) : 0;
-            var desc = descInput ? (parseFloat(descInput.value) || 0) : 0;
+            var qty = qtyInput ? App._parseNum(qtyInput.value) : 0;
+            var cost = costInput ? App._parseNum(costInput.value) : 0;
+            var desc = descInput ? App._parseNum(descInput.value) : 0;
 
             var rowSub = Math.max(0, (qty * cost) - desc);
             var subtotalEl = row.querySelector('.row-subtotal');
@@ -560,29 +726,32 @@ window.App = {
             netSubtotal += rowSub;
         });
 
-        var subtotalNetIds = ['purchaseSubtotalNet', 'subtotalNeto', 'purchaseSubtotal', 'subtotal'];
-        this._setElementValue(subtotalNetIds, netSubtotal, true);
+        // 1. Subtotal Neto Gravado
+        this._setValue(['purchaseSubtotalNet', 'subtotalNeto', 'purchaseSubtotal', 'subtotal'], netSubtotal, true);
 
-        var ivaRateIds = ['purchaseIvaRate', 'tasaIva', 'ivaRate'];
-        var ivaRate = this._getElementNumber(ivaRateIds);
-        if (ivaRate === 0 && !document.getElementById('purchaseIvaRate')) { ivaRate = 21; }
-        
+        // 2. IVA Rate & Monto
+        var ivaRateEl = document.getElementById('purchaseIvaRate') || document.getElementById('tasaIva') || document.getElementById('ivaRate');
+        var ivaRate = ivaRateEl ? App._parseNum(ivaRateEl.value || ivaRateEl.textContent) : 21;
+        if (ivaRateEl && (ivaRateEl.value === '' || ivaRateEl.value === undefined) && !ivaRate) {
+            ivaRate = 21;
+        }
+
         var ivaAmount = (netSubtotal * ivaRate) / 100;
-        var ivaAmountIds = ['purchaseIvaAmount', 'montoIva', 'ivaAmount'];
-        this._setElementValue(ivaAmountIds, ivaAmount, true);
+        this._setValue(['purchaseIvaAmount', 'montoIva', 'ivaAmount'], ivaAmount, true);
 
-        var iibbRateIds = ['purchaseIibbRate', 'tasaIibb', 'iibbRate'];
-        var iibbRate = this._getElementNumber(iibbRateIds);
+        // 3. IIBB Rate & Monto
+        var iibbRateEl = document.getElementById('purchaseIibbRate') || document.getElementById('tasaIibb') || document.getElementById('iibbRate');
+        var iibbRate = iibbRateEl ? App._parseNum(iibbRateEl.value || iibbRateEl.textContent) : 0;
+
         var iibbAmount = (netSubtotal * iibbRate) / 100;
-        var iibbAmountIds = ['purchaseIibbAmount', 'montoIibb', 'iibbAmount'];
-        this._setElementValue(iibbAmountIds, iibbAmount, true);
+        this._setValue(['purchaseIibbAmount', 'montoIibb', 'iibbAmount'], iibbAmount, true);
 
-        var otherTaxesIds = ['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones'];
-        var otherTaxes = this._getElementNumber(otherTaxesIds);
+        // 4. Percepciones / Otros Impuestos
+        var otherTaxes = this._getValue(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones']);
 
+        // 5. Total Factura Final
         var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
-        var totalInvoiceIds = ['purchaseTotalInvoice', 'totalFactura', 'purchaseTotal', 'total'];
-        this._setElementValue(totalInvoiceIds, totalInvoice, true);
+        this._setValue(['purchaseTotalInvoice', 'totalFactura', 'purchaseTotal', 'total'], totalInvoice, true);
     },
 
     handleSavePurchase: async function(event) {
@@ -621,9 +790,9 @@ window.App = {
                 var costInput = row.querySelector('.row-cost-input');
                 var descInput = row.querySelector('.row-discount-val');
 
-                var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
-                var cost = costInput ? (parseFloat(costInput.value) || 0) : 0;
-                var discountVal = descInput ? (parseFloat(descInput.value) || 0) : 0;
+                var qty = qtyInput ? App._parseNum(qtyInput.value) : 0;
+                var cost = costInput ? App._parseNum(costInput.value) : 0;
+                var discountVal = descInput ? App._parseNum(descInput.value) : 0;
                 
                 var subtotal = Math.max(0, (qty * cost) - discountVal);
                 calcNetSubtotal += subtotal;
@@ -638,9 +807,9 @@ window.App = {
                 return;
             }
 
-            var ivaRate = this._getElementNumber(['purchaseIvaRate', 'tasaIva', 'ivaRate']) || 21;
-            var iibbRate = this._getElementNumber(['purchaseIibbRate', 'tasaIibb', 'iibbRate']) || 0;
-            var otherTaxes = this._getElementNumber(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones']) || 0;
+            var ivaRate = this._getValue(['purchaseIvaRate', 'tasaIva', 'ivaRate']) || 21;
+            var iibbRate = this._getValue(['purchaseIibbRate', 'tasaIibb', 'iibbRate']) || 0;
+            var otherTaxes = this._getValue(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones']) || 0;
 
             var ivaAmount = (calcNetSubtotal * ivaRate) / 100;
             var iibbAmount = (calcNetSubtotal * iibbRate) / 100;
@@ -679,7 +848,7 @@ window.App = {
         var tbody = document.getElementById('purchasesHistoryTableBody');
         if (!tbody) return;
 
-        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">Cargando facturas...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">Cargando facturas desde Supabase...</td></tr>';
 
         var purchases = [];
         if (typeof PurchaseManager !== 'undefined' && PurchaseManager.getPurchases) {
@@ -698,9 +867,9 @@ window.App = {
                 '<td class="py-2.5 px-4 font-semibold">' + (p.supplier || '-') + '</td>' +
                 '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-emerald-100 text-emerald-800">✓ ' + p.paymentStatus + '</span></td>' +
                 '<td class="py-2.5 px-3">' + (p.paymentMethod || 'Efectivo') + '</td>' +
-                '<td class="py-2.5 px-3 text-right">$ ' + p.netSubtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
-                '<td class="py-2.5 px-3 text-right">$ ' + p.ivaAmount.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
-                '<td class="py-2.5 px-4 text-right font-black">$ ' + p.totalInvoice.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + p.netSubtotal.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + p.ivaAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-4 text-right font-black">$ ' + p.totalInvoice.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-right">' +
                     '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
                 '</td>' +
