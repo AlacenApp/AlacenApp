@@ -115,7 +115,7 @@ window.App = {
         } else if (this.currentView === 'proveedores') {
             await this.renderSuppliersView();
         } else if (this.currentView === 'compras-nueva') {
-            await this.resetPurchaseForm();
+            this.resetPurchaseForm();
         } else if (this.currentView === 'compras-historial') {
             await this.renderPurchasesTable();
         } else if (this.currentView === 'dashboard') {
@@ -506,7 +506,7 @@ window.App = {
     // ==========================================
     // MÓDULO COMPRAS - FORMULARIO Y RENGLONES
     // ==========================================
-    resetPurchaseForm: async function() {
+    resetPurchaseForm: function() {
         var form = document.getElementById('purchaseForm');
         if (form) form.reset();
 
@@ -514,256 +514,34 @@ window.App = {
         var pDate = document.getElementById('purchaseDate');
         if (pDate) pDate.value = today;
 
-        var tbody = document.getElementById('purchaseItemsTableBody');
+        var tbody = document.getElementById('purchaseItemsTableBody') || 
+                    document.getElementById('purchaseItemsBody') ||
+                    document.getElementById('purchaseTableBody');
         if (tbody) {
             tbody.innerHTML = '';
-            await this.addPurchaseRow: async function(defaultProductId, defaultQty, defaultCost) {
-        if (defaultProductId === undefined) defaultProductId = '';
-        if (defaultQty === undefined) defaultQty = 1;
-        if (defaultCost === undefined) defaultCost = 0;
-
-        var tbody = document.getElementById('purchaseItemsTableBody');
-        if (!tbody) return;
-
-        var products = [];
-        try {
-            if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
-                products = await ProductManager.getProducts();
-            }
-        } catch (err) {
-            console.warn("No se pudieron obtener insumos para la compra:", err);
-        }
-
-        var row = document.createElement('tr');
-        row.className = 'purchase-item-row table-row-hover text-xs';
-
-        var optionsHtml = '';
-        if (products && products.length > 0) {
-            optionsHtml = products.map(function(p) {
-                var selected = (p.id === defaultProductId) ? 'selected' : '';
-                return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
-            }).join('');
-        } else {
-            optionsHtml = '<option value="">-- Sin insumos creados --</option>';
-        }
-
-        row.innerHTML = 
-            '<td class="py-2 px-2.5">' +
-                '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
-                    '<option value="">-- Seleccionar Insumo --</option>' +
-                    optionsHtml +
-                '</select>' +
-            '</td>' +
-            '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
-            '<td class="py-2 px-2 text-center">' +
-                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
-            '</td>';
-
-        tbody.appendChild(row);
-        this.calculatePurchaseTotals();
-    },: async function(defaultProductId, defaultQty, defaultCost) {
-        if (defaultProductId === undefined) defaultProductId = '';
-        if (defaultQty === undefined) defaultQty = 1;
-        if (defaultCost === undefined) defaultCost = 0;
-
-        var tbody = document.getElementById('purchaseItemsTableBody');
-        if (!tbody) return;
-
-        var products = [];
-        try {
-            if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
-                products = await ProductManager.getProducts();
-            }
-        } catch (err) {
-            console.warn("No se pudieron obtener insumos para la compra:", err);
-        }
-
-        var row = document.createElement('tr');
-        row.className = 'purchase-item-row table-row-hover text-xs';
-
-        var optionsHtml = '';
-        if (products && products.length > 0) {
-            optionsHtml = products.map(function(p) {
-                var selected = (p.id === defaultProductId) ? 'selected' : '';
-                return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
-            }).join('');
-        } else {
-            optionsHtml = '<option value="">-- Sin insumos creados --</option>';
-        }
-
-        row.innerHTML = 
-            '<td class="py-2 px-2.5">' +
-                '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
-                    '<option value="">-- Seleccionar Insumo --</option>' +
-                    optionsHtml +
-                '</select>' +
-            '</td>' +
-            '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
-            '<td class="py-2 px-2 text-center">' +
-                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
-            '</td>';
-
-        tbody.appendChild(row);
-        this.calculatePurchaseTotals();
-    },: async function(defaultProductId, defaultQty, defaultCost) {
-        if (defaultProductId === undefined) defaultProductId = '';
-        if (defaultQty === undefined) defaultQty = 1;
-        if (defaultCost === undefined) defaultCost = 0;
-
-        var tbody = document.getElementById('purchaseItemsTableBody');
-        if (!tbody) return;
-
-        var products = [];
-        try {
-            if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
-                products = await ProductManager.getProducts();
-            }
-        } catch (err) {
-            console.warn("No se pudieron obtener insumos para la compra:", err);
-        }
-
-        var row = document.createElement('tr');
-        row.className = 'purchase-item-row table-row-hover text-xs';
-
-        var optionsHtml = '';
-        if (products && products.length > 0) {
-            optionsHtml = products.map(function(p) {
-                var selected = (p.id === defaultProductId) ? 'selected' : '';
-                return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
-            }).join('');
-        } else {
-            optionsHtml = '<option value="">-- Sin insumos creados --</option>';
-        }
-
-        row.innerHTML = 
-            '<td class="py-2 px-2.5">' +
-                '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
-                    '<option value="">-- Seleccionar Insumo --</option>' +
-                    optionsHtml +
-                '</select>' +
-            '</td>' +
-            '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
-            '<td class="py-2 px-2 text-center">' +
-                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
-            '</td>';
-
-        tbody.appendChild(row);
-        this.calculatePurchaseTotals();
-    },: async function(defaultProductId, defaultQty, defaultCost) {
-        if (defaultProductId === undefined) defaultProductId = '';
-        if (defaultQty === undefined) defaultQty = 1;
-        if (defaultCost === undefined) defaultCost = 0;
-
-        var tbody = document.getElementById('purchaseItemsTableBody');
-        if (!tbody) return;
-
-        var products = [];
-        try {
-            if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
-                products = await ProductManager.getProducts();
-            }
-        } catch (err) {
-            console.warn("No se pudieron obtener insumos para la compra:", err);
-        }
-
-        var row = document.createElement('tr');
-        row.className = 'purchase-item-row table-row-hover text-xs';
-
-        var optionsHtml = '';
-        if (products && products.length > 0) {
-            optionsHtml = products.map(function(p) {
-                var selected = (p.id === defaultProductId) ? 'selected' : '';
-                return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
-            }).join('');
-        } else {
-            optionsHtml = '<option value="">-- Sin insumos creados --</option>';
-        }
-
-        row.innerHTML = 
-            '<td class="py-2 px-2.5">' +
-                '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
-                    '<option value="">-- Seleccionar Insumo --</option>' +
-                    optionsHtml +
-                '</select>' +
-            '</td>' +
-            '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
-            '</td>' +
-            '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
-            '<td class="py-2 px-2 text-center">' +
-                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
-            '</td>';
-
-        tbody.appendChild(row);
-        this.calculatePurchaseTotals();
-    },();
+            this.addPurchaseRow();
         }
         this.calculatePurchaseTotals();
     },
 
-    addPurchaseRow: async function(defaultProductId, defaultQty, defaultCost) {
+    addPurchaseRow: function(defaultProductId, defaultQty, defaultCost) {
         if (defaultProductId === undefined) defaultProductId = '';
         if (defaultQty === undefined) defaultQty = 1;
         if (defaultCost === undefined) defaultCost = 0;
 
-        var tbody = document.getElementById('purchaseItemsTableBody');
+        var tbody = document.getElementById('purchaseItemsTableBody') || 
+                    document.getElementById('purchaseItemsBody') ||
+                    document.getElementById('purchaseTableBody');
         if (!tbody) return;
-
-        var products = [];
-        if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
-            products = await ProductManager.getProducts();
-        }
 
         var row = document.createElement('tr');
         row.className = 'purchase-item-row table-row-hover text-xs';
 
-        var optionsHtml = products.map(function(p) {
-            var selected = (p.id === defaultProductId) ? 'selected' : '';
-            return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
-        }).join('');
-
+        // Renderizado sincrónico e inmediato en pantalla
         row.innerHTML = 
             '<td class="py-2 px-2.5">' +
                 '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
-                    '<option value="">-- Seleccionar Insumo --</option>' +
-                    optionsHtml +
+                    '<option value="">Cargando insumos...</option>' +
                 '</select>' +
             '</td>' +
             '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
@@ -778,11 +556,38 @@ window.App = {
             '</td>' +
             '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
             '<td class="py-2 px-2 text-center">' +
-                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
+                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
             '</td>';
 
         tbody.appendChild(row);
         this.calculatePurchaseTotals();
+
+        // Poblar las opciones del selector en segundo plano
+        this._populateRowProducts(row, defaultProductId);
+    },
+
+    _populateRowProducts: async function(row, defaultProductId) {
+        var select = row.querySelector('.row-product-select');
+        if (!select) return;
+
+        var products = [];
+        try {
+            if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
+                products = await ProductManager.getProducts();
+            }
+        } catch (e) {
+            console.error("Error al cargar productos para la fila:", e);
+        }
+
+        if (products && products.length > 0) {
+            var optionsHtml = '<option value="">-- Seleccionar Insumo --</option>' + products.map(function(p) {
+                var selected = (p.id === defaultProductId) ? 'selected' : '';
+                return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
+            }).join('');
+            select.innerHTML = optionsHtml;
+        } else {
+            select.innerHTML = '<option value="">-- Sin insumos creados --</option>';
+        }
     },
 
     updatePurchaseRowProduct: function(selectEl) {
@@ -913,7 +718,7 @@ window.App = {
 
             await PurchaseManager.savePurchase(purchaseData);
             this.showToast('¡Factura guardada y stock actualizado!', 'success');
-            await this.resetPurchaseForm();
+            this.resetPurchaseForm();
             await this.navigate('compras-historial');
         } catch (e) {
             alert(e.message || "Error al guardar la compra");
