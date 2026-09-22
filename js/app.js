@@ -270,14 +270,20 @@ window.App = {
         if (dashStockValEl) dashStockValEl.textContent = '$ 0.00';
     },
 
+    // ==========================================
+    // MÓDULO INSUMOS
+    // ==========================================
     renderProductsTable: async function() {
         var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
+
         tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>';
+
         var products = [];
         if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
             products = await ProductManager.getProducts();
         }
+
         var searchInput = document.getElementById('prodSearchInput');
         var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
         if (filterVal) {
@@ -285,10 +291,12 @@ window.App = {
                 return p.name.toLowerCase().includes(filterVal) || (p.code && p.code.toLowerCase().includes(filterVal));
             });
         }
+
         if (products.length === 0) {
             tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos para este local.</td></tr>';
             return;
         }
+
         tbody.innerHTML = products.map(function(p) {
             return '<tr class="table-row-hover text-xs">' +
                 '<td class="py-2.5 px-3 font-mono font-bold">' + (p.code || '-') + '</td>' +
@@ -312,9 +320,12 @@ window.App = {
     openProductModal: async function(productId) {
         var form = document.getElementById('productForm');
         if (form) form.reset();
+        
         document.getElementById('prodFormId').value = productId || '';
         document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo / Mercadería';
+
         await this.populateDropdowns();
+
         if (productId) {
             var products = await ProductManager.getProducts();
             var p = products.find(function(item) { return item.id === productId; });
@@ -329,6 +340,7 @@ window.App = {
                 document.getElementById('prodFormSale').value = p.salePrice || 0;
             }
         }
+
         var modal = document.getElementById('productModal');
         if (modal) modal.classList.remove('hidden');
     },
@@ -342,7 +354,11 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('prodFormName');
-            if (!nameInput || !nameInput.value.trim()) { alert("Ingresa un nombre."); return; }
+            if (!nameInput || !nameInput.value.trim()) {
+                alert("Por favor ingresa un nombre para el insumo.");
+                return;
+            }
+
             var formData = {
                 id: document.getElementById('prodFormId').value || undefined,
                 code: document.getElementById('prodFormCode').value.trim(),
@@ -354,11 +370,14 @@ window.App = {
                 costPrice: document.getElementById('prodFormCost').value,
                 salePrice: document.getElementById('prodFormSale').value
             };
+
             await ProductManager.saveProduct(formData);
             this.closeProductModal();
             this.showToast('¡Insumo guardado en Supabase!', 'success');
             await this.renderProductsTable();
-        } catch (e) { alert(e.message || "Error al guardar insumo"); }
+        } catch (e) {
+            alert(e.message || "Error al guardar insumo");
+        }
     },
 
     deleteProductFromDb: async function(id) {
@@ -367,17 +386,25 @@ window.App = {
             await ProductManager.deleteProduct(id);
             this.showToast('Insumo eliminado', 'info');
             await this.renderProductsTable();
-        } catch (e) { alert(e.message); }
+        } catch (e) {
+            alert(e.message);
+        }
     },
 
+    // ==========================================
+    // MÓDULO PROVEEDORES
+    // ==========================================
     renderSuppliersView: async function() {
         var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
+
         tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>';
+
         var suppliers = [];
         if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
             suppliers = await SupplierManager.getSuppliers();
         }
+
         var searchInput = document.getElementById('supplierSearchInput');
         var filterVal = searchInput ? searchInput.value.toLowerCase().trim() : '';
         if (filterVal) {
@@ -385,12 +412,15 @@ window.App = {
                 return s.name.toLowerCase().includes(filterVal) || (s.cuit && s.cuit.includes(filterVal));
             });
         }
+
         var badge = document.getElementById('suppliersTotalBadge');
         if (badge) badge.textContent = suppliers.length + ' proveedores';
+
         if (suppliers.length === 0) {
             tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>';
             return;
         }
+
         tbody.innerHTML = suppliers.map(function(s) {
             return '<tr class="table-row-hover text-xs">' +
                 '<td class="py-3 px-4 font-bold text-slate-900">' + s.name + '</td>' +
@@ -411,8 +441,10 @@ window.App = {
     openSupplierModal: async function(supplierId) {
         var form = document.getElementById('supplierForm');
         if (form) form.reset();
+
         document.getElementById('supFormId').value = supplierId || '';
         document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
+
         if (supplierId) {
             var suppliers = await SupplierManager.getSuppliers();
             var s = suppliers.find(function(item) { return item.id === supplierId; });
@@ -424,6 +456,7 @@ window.App = {
                 document.getElementById('supFormEmail').value = s.email || '';
             }
         }
+
         var modal = document.getElementById('supplierModal');
         if (modal) modal.classList.remove('hidden');
     },
@@ -437,7 +470,11 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('supFormName');
-            if (!nameInput || !nameInput.value.trim()) { alert("Por favor ingresa un nombre para el proveedor."); return; }
+            if (!nameInput || !nameInput.value.trim()) {
+                alert("Por favor ingresa un nombre para el proveedor.");
+                return;
+            }
+
             var formData = {
                 id: document.getElementById('supFormId').value || undefined,
                 name: nameInput.value.trim(),
@@ -446,11 +483,14 @@ window.App = {
                 phone: document.getElementById('supFormPhone').value.trim(),
                 email: document.getElementById('supFormEmail').value.trim()
             };
+
             await SupplierManager.saveSupplier(formData);
             this.closeSupplierModal();
             this.showToast('¡Proveedor guardado en Supabase!', 'success');
             await this.renderSuppliersView();
-        } catch (e) { alert(e.message || "Error al guardar proveedor"); }
+        } catch (e) {
+            alert(e.message || "Error al guardar proveedor");
+        }
     },
 
     deleteSupplierFromDb: async function(id) {
@@ -459,7 +499,9 @@ window.App = {
             await SupplierManager.deleteSupplier(id);
             this.showToast('Proveedor eliminado', 'info');
             await this.renderSuppliersView();
-        } catch (e) { alert(e.message); }
+        } catch (e) {
+            alert(e.message);
+        }
     },
 
     // ==========================================
@@ -476,27 +518,23 @@ window.App = {
             var tbody = row.parentElement;
             
             if (type === 'select') {
-                // Si el Insumo ESTÁ VACÍO, despliega la lista
                 if (!element.value) {
                     if (typeof element.showPicker === 'function') {
                         try { element.showPicker(); } catch(err) {
                             var qtyFallback = row.querySelector('.row-qty-input');
-                            if (qtyFallback) { qtyFallback.focus(); qtyFallback.select(); }
+                            if (qtyFallback) { setTimeout(function(){qtyFallback.focus(); qtyFallback.select();}, 10); }
                         }
                     }
                 } else {
-                    // Si ya seleccionó, salta directo a Cantidad
                     var qty = row.querySelector('.row-qty-input');
-                    if (qty) { qty.focus(); qty.select(); }
+                    if (qty) { setTimeout(function(){qty.focus(); qty.select();}, 10); }
                 }
             } 
             else if (type === 'qty') {
-                // De Cantidad, salta a Precio (Costo)
                 var cost = row.querySelector('.row-cost-input');
-                if (cost) { cost.focus(); cost.select(); }
+                if (cost) { setTimeout(function(){cost.focus(); cost.select();}, 10); }
             }
             else if (type === 'cost' || type === 'desc') {
-                // De Precio, crea la NUEVA FILA
                 var isLastRow = (row === tbody.lastElementChild);
                 if (isLastRow) {
                     App.addPurchaseRow('', 1, 0, true);
@@ -504,7 +542,7 @@ window.App = {
                     var nextRow = row.nextElementSibling;
                     if (nextRow) {
                         var nextSelect = nextRow.querySelector('.row-product-select');
-                        if (nextSelect) nextSelect.focus();
+                        if (nextSelect) { setTimeout(function(){nextSelect.focus();}, 10); }
                     }
                 }
             }
@@ -538,7 +576,6 @@ window.App = {
     },
 
     addPurchaseRow: function(defaultProductId, defaultQty, defaultCost, autoFocus) {
-        // Bloqueo Anti-Rebote para la Fila Doble
         if (this._isAddingRow) return;
         this._isAddingRow = true;
         var self = this;
@@ -631,8 +668,6 @@ window.App = {
 
             var unitTd = row.querySelector('.row-unit');
             if (unitTd) unitTd.textContent = unit;
-            
-            // NO se obliga a saltar el foco aquí. Así puedes escribir sin interrupción.
         }
         this.calculatePurchaseTotals();
     },
@@ -668,27 +703,35 @@ window.App = {
             netSubtotal += rowSub;
         });
 
-        var subtotalNetEl = document.getElementById('purchaseSubtotalNet');
-        if (subtotalNetEl) subtotalNetEl.value = netSubtotal.toFixed(2);
+        function updateDisplay(id, amount, asCurrency) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'INPUT') {
+                el.value = amount.toFixed(2);
+            } else {
+                el.textContent = asCurrency ? ('$ ' + amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : amount.toFixed(2);
+            }
+        }
 
         var ivaRateEl = document.getElementById('purchaseIvaRate');
-        var ivaRate = ivaRateEl ? (parseFloat(ivaRateEl.value) || 21) : 21;
-        var ivaAmountEl = document.getElementById('purchaseIvaAmount');
-        var ivaAmount = (netSubtotal * ivaRate) / 100;
-        if (ivaAmountEl) ivaAmountEl.value = ivaAmount.toFixed(2);
-
+        var ivaRate = ivaRateEl ? (parseFloat(ivaRateEl.value || ivaRateEl.textContent) || 0) : 21;
+        
         var iibbRateEl = document.getElementById('purchaseIibbRate');
-        var iibbRate = iibbRateEl ? (parseFloat(iibbRateEl.value) || 0) : 0;
-        var iibbAmountEl = document.getElementById('purchaseIibbAmount');
-        var iibbAmount = (netSubtotal * iibbRate) / 100;
-        if (iibbAmountEl) iibbAmountEl.value = iibbAmount.toFixed(2);
-
+        var iibbRate = iibbRateEl ? (parseFloat(iibbRateEl.value || iibbRateEl.textContent) || 0) : 0;
+        
         var otherTaxesEl = document.getElementById('purchaseOtherTaxes');
-        var otherTaxes = otherTaxesEl ? (parseFloat(otherTaxesEl.value) || 0) : 0;
+        var otherTaxes = otherTaxesEl ? (parseFloat(otherTaxesEl.value || otherTaxesEl.textContent) || 0) : 0;
+
+        updateDisplay('purchaseSubtotalNet', netSubtotal, true);
+
+        var ivaAmount = (netSubtotal * ivaRate) / 100;
+        updateDisplay('purchaseIvaAmount', ivaAmount, true);
+
+        var iibbAmount = (netSubtotal * iibbRate) / 100;
+        updateDisplay('purchaseIibbAmount', iibbAmount, true);
 
         var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
-        var totalEl = document.getElementById('purchaseTotalInvoice');
-        if (totalEl) totalEl.value = totalInvoice.toFixed(2);
+        updateDisplay('purchaseTotalInvoice', totalInvoice, true);
     },
 
     handleSavePurchase: async function(event) {
@@ -716,6 +759,7 @@ window.App = {
 
             var rows = document.querySelectorAll('.purchase-item-row');
             var items = [];
+            var calcNetSubtotal = 0;
 
             rows.forEach(function(row) {
                 var select = row.querySelector('.row-product-select');
@@ -729,7 +773,9 @@ window.App = {
                 var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
                 var cost = costInput ? (parseFloat(costInput.value) || 0) : 0;
                 var discountVal = descInput ? (parseFloat(descInput.value) || 0) : 0;
+                
                 var subtotal = Math.max(0, (qty * cost) - discountVal);
+                calcNetSubtotal += subtotal;
 
                 if (productId && qty > 0) {
                     items.push({ productId: productId, productName: productName, qty: qty, cost: cost, discountVal: discountVal, subtotal: subtotal });
@@ -741,20 +787,18 @@ window.App = {
                 return;
             }
 
-            var subNetEl = document.getElementById('purchaseSubtotalNet');
-            var netSubtotal = subNetEl ? (parseFloat(subNetEl.value) || 0) : 0;
+            var ivaRateEl = document.getElementById('purchaseIvaRate');
+            var ivaRate = ivaRateEl ? (parseFloat(ivaRateEl.value || ivaRateEl.textContent) || 0) : 21;
+            
+            var iibbRateEl = document.getElementById('purchaseIibbRate');
+            var iibbRate = iibbRateEl ? (parseFloat(iibbRateEl.value || iibbRateEl.textContent) || 0) : 0;
+            
+            var otherTaxesEl = document.getElementById('purchaseOtherTaxes');
+            var otherTaxes = otherTaxesEl ? (parseFloat(otherTaxesEl.value || otherTaxesEl.textContent) || 0) : 0;
 
-            var ivaAmtEl = document.getElementById('purchaseIvaAmount');
-            var ivaAmount = ivaAmtEl ? (parseFloat(ivaAmtEl.value) || 0) : 0;
-
-            var iibbAmtEl = document.getElementById('purchaseIibbAmount');
-            var iibbAmount = iibbAmtEl ? (parseFloat(iibbAmtEl.value) || 0) : 0;
-
-            var othTaxEl = document.getElementById('purchaseOtherTaxes');
-            var otherTaxes = othTaxEl ? (parseFloat(othTaxEl.value) || 0) : 0;
-
-            var totInvEl = document.getElementById('purchaseTotalInvoice');
-            var totalInvoice = totInvEl ? (parseFloat(totInvEl.value) || 0) : 0;
+            var ivaAmount = (calcNetSubtotal * ivaRate) / 100;
+            var iibbAmount = (calcNetSubtotal * iibbRate) / 100;
+            var totalInvoice = calcNetSubtotal + ivaAmount + iibbAmount + otherTaxes;
 
             var notesEl = document.getElementById('purchaseNotes');
             var notes = notesEl ? notesEl.value : '';
@@ -767,7 +811,7 @@ window.App = {
                 paymentStatus: paymentStatus,
                 paymentMethod: paymentMethod,
                 paymentDate: paymentDate,
-                netSubtotal: netSubtotal,
+                netSubtotal: calcNetSubtotal,
                 ivaAmount: ivaAmount,
                 iibbAmount: iibbAmount,
                 otherTaxes: otherTaxes,
@@ -829,6 +873,7 @@ window.App = {
         }
     },
 
+    // Handlers y Modales secundarios
     renderOCHistoryTable: function() {},
     renderInventorySheets: function() {},
     renderCMVView: function() {},
