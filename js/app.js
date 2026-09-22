@@ -101,20 +101,6 @@ window.App = {
         this.populateDropdowns();
         this.updateHeaderBusinessInfo();
         this.renderDashboard();
-
-        // Evita enviar el formulario accidentalmente al presionar Enter en toda la app
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
-                if (e.target.closest('form')) { e.preventDefault(); }
-            }
-        });
-
-        // Recalcular automáticamente si el usuario escribe en cualquier input de la vista compras
-        document.addEventListener('input', function(e) {
-            if (App.currentView === 'compras-nueva' && e.target.tagName === 'INPUT') {
-                App.calculatePurchaseTotals();
-            }
-        });
     },
 
     getLocalId: function() {
@@ -218,11 +204,11 @@ window.App = {
         }
 
         var titles = {
-            'dashboard': { title: 'Panel Principal', sub: 'Resumen operativo' },
-            'compras-nueva': { title: 'Cargar Factura / Gasto', sub: 'Liquidación impositiva y carga de stock' },
-            'proveedores': { title: 'Proveedores', sub: 'Fichas comerciales' },
-            'productos': { title: 'Insumos', sub: 'Catálogo de existencias' },
-            'compras-historial': { title: 'Historial', sub: 'Registro de facturas' }
+            'dashboard': { title: 'Panel Principal', sub: 'Resumen operativo y estado general del inventario' },
+            'compras-nueva': { title: 'Cargar Factura / Gasto', sub: 'Liquidación impositiva y estado de pago' },
+            'proveedores': { title: 'Directorio de Proveedores', sub: 'Fichas comerciales y datos fiscales' },
+            'productos': { title: 'Insumos y Categorías', sub: 'Catálogo de existencias y costos' },
+            'compras-historial': { title: 'Historial de Pagos', sub: 'Registro de facturas y cuentas a pagar' }
         };
 
         var pageTitle = document.getElementById('pageTitle');
@@ -256,7 +242,7 @@ window.App = {
     renderProductsTable: async function() {
         var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>';
         
         var products = [];
         if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
@@ -272,7 +258,7 @@ window.App = {
         }
 
         if (products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos para este local.</td></tr>';
             return;
         }
 
@@ -285,21 +271,23 @@ window.App = {
                 '<td class="py-2.5 px-2 text-center font-medium">' + (p.unit || 'u.') + '</td>' +
                 '<td class="py-2.5 px-3 text-right font-black">' + p.currentStock + '</td>' +
                 '<td class="py-2.5 px-3 text-right text-slate-400">' + p.minStock + '</td>' +
-                '<td class="py-2.5 px-3 text-right">$ ' + p.costPrice.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
-                '<td class="py-2.5 px-3 text-right font-bold">$ ' + (p.currentStock * p.costPrice).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + (p.costPrice || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right font-bold">$ ' + ((p.currentStock || 0) * (p.costPrice || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>' +
                 '<td class="py-2.5 px-3 text-right">' +
-                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td></tr>';
+                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td>' +
+            '</tr>';
         }).join('');
     },
 
     openProductModal: async function(productId) {
         var form = document.getElementById('productForm');
         if (form) form.reset();
+
         document.getElementById('prodFormId').value = productId || '';
-        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo';
+        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo / Mercadería';
         await this.populateDropdowns();
 
         if (productId) {
@@ -329,7 +317,8 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('prodFormName');
-            if (!nameInput || !nameInput.value.trim()) { alert("Ingresa un nombre."); return; }
+            if (!nameInput || !nameInput.value.trim()) { alert("Por favor ingresa un nombre."); return; }
+
             var formData = {
                 id: document.getElementById('prodFormId').value || undefined,
                 code: document.getElementById('prodFormCode').value.trim(),
@@ -341,11 +330,12 @@ window.App = {
                 costPrice: document.getElementById('prodFormCost').value,
                 salePrice: document.getElementById('prodFormSale').value
             };
+
             await ProductManager.saveProduct(formData);
             this.closeProductModal();
-            this.showToast('¡Insumo guardado!', 'success');
+            this.showToast('¡Insumo guardado en Supabase!', 'success');
             await this.renderProductsTable();
-        } catch (e) { alert(e.message); }
+        } catch (e) { alert(e.message || "Error al guardar insumo"); }
     },
 
     deleteProductFromDb: async function(id) {
@@ -363,7 +353,7 @@ window.App = {
     renderSuppliersView: async function() {
         var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>';
         
         var suppliers = [];
         if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
@@ -382,7 +372,7 @@ window.App = {
         if (badge) badge.textContent = suppliers.length + ' proveedores';
 
         if (suppliers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>';
             return;
         }
 
@@ -393,18 +383,20 @@ window.App = {
                 '<td class="py-3 px-3">' + (s.contactPerson || '-') + '</td>' +
                 '<td class="py-3 px-3">' + (s.phone || '-') + '</td>' +
                 '<td class="py-3 px-3">' + (s.email || '-') + '</td>' +
-                '<td class="py-3 px-3">' + s.paymentMethods + '</td>' +
+                '<td class="py-3 px-3">' + (s.paymentMethods || '-') + '</td>' +
                 '<td class="py-3 px-2 text-center">--</td>' +
                 '<td class="py-3 px-4 text-right">' +
-                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td></tr>';
+                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td>' +
+            '</tr>';
         }).join('');
     },
 
     openSupplierModal: async function(supplierId) {
         var form = document.getElementById('supplierForm');
         if (form) form.reset();
+
         document.getElementById('supFormId').value = supplierId || '';
         document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
 
@@ -432,7 +424,8 @@ window.App = {
         event.preventDefault();
         try {
             var nameInput = document.getElementById('supFormName');
-            if (!nameInput || !nameInput.value.trim()) { alert("Ingresa un nombre."); return; }
+            if (!nameInput || !nameInput.value.trim()) { alert("Por favor ingresa un nombre."); return; }
+
             var formData = {
                 id: document.getElementById('supFormId').value || undefined,
                 name: nameInput.value.trim(),
@@ -441,11 +434,12 @@ window.App = {
                 phone: document.getElementById('supFormPhone').value.trim(),
                 email: document.getElementById('supFormEmail').value.trim()
             };
+
             await SupplierManager.saveSupplier(formData);
             this.closeSupplierModal();
-            this.showToast('¡Proveedor guardado!', 'success');
+            this.showToast('¡Proveedor guardado en Supabase!', 'success');
             await this.renderSuppliersView();
-        } catch (e) { alert(e.message); }
+        } catch (e) { alert(e.message || "Error al guardar proveedor"); }
     },
 
     deleteSupplierFromDb: async function(id) {
@@ -458,10 +452,28 @@ window.App = {
     },
 
     // ==========================================
-    // MÓDULO COMPRAS - TECLADO Y CÁLCULOS ROBUSTOS
+    // MÓDULO COMPRAS - TECLADO Y CÁLCULOS
     // ==========================================
 
-    // Navegación secuencial exacta sin robar foco al tipear
+    handlePurchaseFormKeydown: function(e) {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    },
+
+    handlePurchaseRowKeydown: function(e) {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    },
+
+    handlePurchaseDateChange: function(val) {},
+    handlePurchaseSupplierChange: function(val) {},
+    handlePurchasePaymentStatusChange: function(val) {},
+    cancelPurchaseEdit: function() {},
+
     handleRowKeydown: function(e, element, type) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -473,16 +485,17 @@ window.App = {
             
             if (type === 'select') {
                 if (!element.value) {
-                    // Si está vacío, intentar abrir lista
                     if (typeof element.showPicker === 'function') {
-                        try { element.showPicker(); } catch(err) {
-                            row.querySelector('.row-qty-input')?.focus();
+                        try { 
+                            element.showPicker(); 
+                        } catch(err) {
+                            var q1 = row.querySelector('.row-qty-input');
+                            if (q1) { q1.focus(); q1.select(); }
                         }
                     }
                 } else {
-                    // Si tiene valor, saltar a cantidad
-                    var qty = row.querySelector('.row-qty-input');
-                    if (qty) { qty.focus(); qty.select(); }
+                    var q2 = row.querySelector('.row-qty-input');
+                    if (q2) { q2.focus(); q2.select(); }
                 }
             } 
             else if (type === 'qty') {
@@ -492,11 +505,12 @@ window.App = {
             else if (type === 'cost' || type === 'desc') {
                 var isLastRow = (row === tbody.lastElementChild);
                 if (isLastRow) {
-                    App.addPurchaseRow('', 1, 0, true);
+                    App.addPurchaseRow('', 1, 0, 0, 0, true);
                 } else {
                     var nextRow = row.nextElementSibling;
                     if (nextRow) {
-                        nextRow.querySelector('.row-product-select')?.focus();
+                        var nextSelect = nextRow.querySelector('.row-product-select');
+                        if (nextSelect) { nextSelect.focus(); }
                     }
                 }
             }
@@ -511,70 +525,73 @@ window.App = {
         var pDate = document.getElementById('purchaseDate');
         if (pDate) pDate.value = today;
 
-        var tbody = document.getElementById('purchaseItemsTableBody') || 
-                    document.getElementById('purchaseItemsBody') ||
-                    document.getElementById('purchaseTableBody');
+        var pPayDate = document.getElementById('purchasePaymentDate');
+        if (pPayDate) pPayDate.value = today;
+
+        var tbody = document.getElementById('purchaseItemsTableBody');
         if (tbody) {
             tbody.innerHTML = '';
-            this.addPurchaseRow('', 1, 0, false);
+            this.addPurchaseRow('', 1, 0, 0, 0, false);
         }
+
+        var editId = document.getElementById('purchaseEditId');
+        if (editId) editId.value = '';
+
+        var banner = document.getElementById('purchaseEditBanner');
+        if (banner) banner.classList.add('hidden');
 
         this.calculatePurchaseTotals();
     },
 
-    addPurchaseRow: function(defaultProductId, defaultQty, defaultCost, autoFocus) {
+    addPurchaseRow: function(defaultProductId, defaultQty, defaultCost, defaultDiscount, defaultDiscountRate, autoFocus) {
         if (this._isAddingRow) return;
         this._isAddingRow = true;
+        var self = this;
+        setTimeout(function() { self._isAddingRow = false; }, 150);
+
+        if (defaultProductId === undefined) defaultProductId = '';
+        if (defaultQty === undefined) defaultQty = 1;
+        if (defaultCost === undefined) defaultCost = 0;
+        if (autoFocus === undefined) autoFocus = true;
+
+        var tbody = document.getElementById('purchaseItemsTableBody');
+        if (!tbody) return;
+
+        var row = document.createElement('tr');
+        row.className = 'purchase-item-row table-row-hover text-xs';
+
+        row.innerHTML = 
+            '<td class="py-2 px-2.5">' +
+                '<select required onchange="App.updatePurchaseRowProduct(this)" onkeydown="App.handleRowKeydown(event, this, \'select\')" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
+                    '<option value="">Cargando insumos...</option>' +
+                '</select>' +
+            '</td>' +
+            '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
+            '<td class="py-2 px-2">' +
+                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+            '</td>' +
+            '<td class="py-2 px-2">' +
+                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'cost\')" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+            '</td>' +
+            '<td class="py-2 px-2">' +
+                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'desc\')" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+            '</td>' +
+            '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
+            '<td class="py-2 px-2 text-center">' +
+                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
+            '</td>';
+
+        tbody.appendChild(row);
+        this.calculatePurchaseTotals();
         
-        try {
-            if (defaultProductId === undefined) defaultProductId = '';
-            if (defaultQty === undefined) defaultQty = 1;
-            if (defaultCost === undefined) defaultCost = 0;
-            if (autoFocus === undefined) autoFocus = true;
-
-            var tbody = document.getElementById('purchaseItemsTableBody') || 
-                        document.getElementById('purchaseItemsBody') ||
-                        document.getElementById('purchaseTableBody');
-            if (!tbody) return;
-
-            var row = document.createElement('tr');
-            row.className = 'purchase-item-row table-row-hover text-xs';
-
-            row.innerHTML = 
-                '<td class="py-2 px-2.5">' +
-                    '<select required onchange="App.updatePurchaseRowProduct(this)" onkeydown="App.handleRowKeydown(event, this, \'select\')" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
-                        '<option value="">Buscando insumos...</option>' +
-                    '</select>' +
-                '</td>' +
-                '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
-                '<td class="py-2 px-2">' +
-                    '<input type="number" step="any" min="0" value="' + defaultQty + '" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500">' +
-                '</td>' +
-                '<td class="py-2 px-2">' +
-                    '<input type="number" step="any" min="0" value="' + defaultCost + '" onkeydown="App.handleRowKeydown(event, this, \'cost\')" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500">' +
-                '</td>' +
-                '<td class="py-2 px-2">' +
-                    '<input type="number" step="any" min="0" value="0" onkeydown="App.handleRowKeydown(event, this, \'desc\')" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-sky-500">' +
-                '</td>' +
-                '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
-                '<td class="py-2 px-2 text-center">' +
-                    '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td>';
-
-            tbody.appendChild(row);
-            this.calculatePurchaseTotals();
-            
-            if (autoFocus) {
-                setTimeout(function() {
-                    var ns = row.querySelector('.row-product-select');
-                    if (ns) ns.focus();
-                }, 10);
-            }
-
-            this._populateRowProducts(row, defaultProductId);
-        } finally {
-            setTimeout(() => { this._isAddingRow = false; }, 150);
+        if (autoFocus) {
+            setTimeout(function() {
+                var newSelect = row.querySelector('.row-product-select');
+                if (newSelect) newSelect.focus();
+            }, 15);
         }
+
+        this._populateRowProducts(row, defaultProductId);
     },
 
     _populateRowProducts: async function(row, defaultProductId) {
@@ -589,17 +606,16 @@ window.App = {
         } catch (e) { }
 
         if (products && products.length > 0) {
-            var optionsHtml = '<option value="">-- Buscar / Seleccionar --</option>' + products.map(function(p) {
+            var optionsHtml = '<option value="">-- Seleccionar Insumo --</option>' + products.map(function(p) {
                 var selected = (p.id === defaultProductId) ? 'selected' : '';
                 return '<option value="' + p.id + '" data-cost="' + (p.costPrice || 0) + '" data-unit="' + (p.unit || 'u.') + '" ' + selected + '>' + p.name + '</option>';
             }).join('');
             if (select.value === '') select.innerHTML = optionsHtml;
         } else {
-            select.innerHTML = '<option value="">-- Sin insumos --</option>';
+            select.innerHTML = '<option value="">-- Sin insumos creados --</option>';
         }
     },
 
-    // Actualiza valores PERO NO ROBA EL FOCO para que el usuario pueda escribir/buscar con teclado
     updatePurchaseRowProduct: function(selectEl) {
         var row = selectEl.closest('tr');
         if (!row) return;
@@ -628,68 +644,124 @@ window.App = {
         }
     },
 
-    // BUSCADOR UNIVERSAL DE ELEMENTOS DE TOTALES (Ignora diferencias de nombres en tu HTML)
+    // ====================================================
+    // CÁLCULO DE TOTALES DE LA FACTURA (IDs EXACTOS DEL HTML)
+    // ====================================================
+
     calculatePurchaseTotals: function() {
         var rows = document.querySelectorAll('.purchase-item-row');
         var netSubtotal = 0;
+        var grossSubtotal = 0;
+        var totalDiscount = 0;
 
-        // 1. Calcular cada renglón
         rows.forEach(function(row) {
             var qty = parseFloat(row.querySelector('.row-qty-input')?.value) || 0;
             var cost = parseFloat(row.querySelector('.row-cost-input')?.value) || 0;
             var desc = parseFloat(row.querySelector('.row-discount-val')?.value) || 0;
 
-            var rowSub = Math.max(0, (qty * cost) - desc);
+            var rowGross = qty * cost;
+            var rowNet = Math.max(0, rowGross - desc);
+
             var subtotalEl = row.querySelector('.row-subtotal');
             if (subtotalEl) {
-                subtotalEl.textContent = '$ ' + rowSub.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                subtotalEl.textContent = '$ ' + rowNet.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
-            netSubtotal += rowSub;
+
+            grossSubtotal += rowGross;
+            totalDiscount += desc;
+            netSubtotal += rowNet;
         });
 
-        // 2. Extraer Valores Limpios
-        var val = function(ids) {
-            for(var i=0; i<ids.length; i++) {
-                var el = document.getElementById(ids[i]);
-                if(el) {
-                    var raw = el.tagName === 'INPUT' || el.tagName === 'SELECT' ? el.value : el.textContent;
-                    var str = String(raw).replace(/\$/g, '').replace(/\s/g, '');
-                    if(str.includes(',') && str.includes('.')) str = str.replace(/\./g, '').replace(',', '.');
-                    else if(str.includes(',')) str = str.replace(',', '.');
-                    str = str.replace(/[^0-9.-]/g, '');
-                    return parseFloat(str) || 0;
-                }
-            }
-            return 0;
-        };
+        // 1. Escribir Subtotal Neto Gravado en el input
+        var taxNetInput = document.getElementById('taxNetSubtotal');
+        if (taxNetInput) taxNetInput.value = netSubtotal.toFixed(2);
 
-        // 3. Escribir Resultados Formateados
-        var setVal = function(ids, num) {
-            for(var i=0; i<ids.length; i++) {
-                var el = document.getElementById(ids[i]);
-                if(el) {
-                    if(el.tagName === 'INPUT') el.value = num.toFixed(2);
-                    else el.textContent = '$ ' + num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                }
-            }
-        };
-
-        // Obtener tasas e impuestos que el usuario tipeó manualmente
-        var ivaRate = val(['purchaseIvaRate', 'tasaIva', 'ivaRate', 'tasa_iva']);
-        var iibbRate = val(['purchaseIibbRate', 'tasaIibb', 'iibbRate', 'tasa_iibb']);
-        var otherTaxes = val(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones', 'otros_impuestos', 'percepcionIva', 'percepcionIibb']);
-
-        // Calcular importes de impuestos
+        // 2. Calcular IVA
+        var ivaRateSelect = document.getElementById('taxIvaRate');
+        var ivaRate = ivaRateSelect ? (parseFloat(ivaRateSelect.value) || 0) : 21;
         var ivaAmount = (netSubtotal * ivaRate) / 100;
+        var ivaAmountInput = document.getElementById('taxIvaAmount');
+        if (ivaAmountInput) ivaAmountInput.value = ivaAmount.toFixed(2);
+
+        // 3. Calcular IIBB
+        var iibbRateInput = document.getElementById('taxIibbRate');
+        var iibbRate = iibbRateInput ? (parseFloat(iibbRateInput.value) || 0) : 0;
+        var iibbAmount = (netSubtotal * iibbRate) / 100;
+        var iibbAmountInput = document.getElementById('taxIibbAmount');
+        if (iibbAmountInput) iibbAmountInput.value = iibbAmount.toFixed(2);
+
+        // 4. Percepciones e Impuestos adicionales
+        var ivaPerception = parseFloat(document.getElementById('taxIvaPerception')?.value) || 0;
+        var otherTaxes = parseFloat(document.getElementById('taxOtherTaxes')?.value) || 0;
+
+        var totalTaxes = ivaAmount + iibbAmount + ivaPerception + otherTaxes;
+        var totalInvoice = netSubtotal + totalTaxes;
+
+        // 5. Actualizar los textos del Footer
+        var grossEl = document.getElementById('footerGrossSubtotal');
+        if (grossEl) grossEl.textContent = '$ ' + grossSubtotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        var discRow = document.getElementById('footerDiscountRow');
+        var discEl = document.getElementById('footerDiscountAmount');
+        if (discRow && discEl) {
+            if (totalDiscount > 0) {
+                discRow.classList.remove('hidden');
+                discEl.textContent = '- $ ' + totalDiscount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } else {
+                discRow.classList.add('hidden');
+            }
+        }
+
+        var netEl = document.getElementById('footerNetSubtotal');
+        if (netEl) netEl.textContent = '$ ' + netSubtotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        var taxesEl = document.getElementById('footerTotalTaxes');
+        if (taxesEl) taxesEl.textContent = '$ ' + totalTaxes.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        var totalEl = document.getElementById('purchaseTotalAmount');
+        if (totalEl) totalEl.textContent = '$ ' + totalInvoice.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    recalculateTaxesFromRate: function() {
+        var netSubtotal = parseFloat(document.getElementById('taxNetSubtotal')?.value) || 0;
+        var ivaRate = parseFloat(document.getElementById('taxIvaRate')?.value) || 0;
+        var ivaAmount = (netSubtotal * ivaRate) / 100;
+        
+        var ivaInput = document.getElementById('taxIvaAmount');
+        if (ivaInput) ivaInput.value = ivaAmount.toFixed(2);
+
+        this.recalculateTotalInvoiceFromInputs();
+    },
+
+    recalculateIibbFromRate: function() {
+        var netSubtotal = parseFloat(document.getElementById('taxNetSubtotal')?.value) || 0;
+        var iibbRate = parseFloat(document.getElementById('taxIibbRate')?.value) || 0;
         var iibbAmount = (netSubtotal * iibbRate) / 100;
 
-        // Escribir a la pantalla en todos los casilleros posibles que tengas
-        setVal(['purchaseSubtotalNet', 'subtotalNeto', 'subtotal', 'subtotal_neto', 'subtotalNetoGravado', 'netoGravado'], netSubtotal);
-        setVal(['purchaseIvaAmount', 'montoIva', 'ivaAmount', 'monto_iva'], ivaAmount);
-        setVal(['purchaseIibbAmount', 'montoIibb', 'iibbAmount', 'monto_iibb'], iibbAmount);
+        var iibbInput = document.getElementById('taxIibbAmount');
+        if (iibbInput) iibbInput.value = iibbAmount.toFixed(2);
 
-        var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
-        setVal(['purchaseTotalInvoice', 'totalFactura', 'total', 'total_factura'], totalInvoice);
+        this.recalculateTotalInvoiceFromInputs();
+    },
+
+    recalculateTotalInvoiceFromInputs: function() {
+        var netSubtotal = parseFloat(document.getElementById('taxNetSubtotal')?.value) || 0;
+        var ivaAmount = parseFloat(document.getElementById('taxIvaAmount')?.value) || 0;
+        var iibbAmount = parseFloat(document.getElementById('taxIibbAmount')?.value) || 0;
+        var ivaPerception = parseFloat(document.getElementById('taxIvaPerception')?.value) || 0;
+        var otherTaxes = parseFloat(document.getElementById('taxOtherTaxes')?.value) || 0;
+
+        var totalTaxes = ivaAmount + iibbAmount + ivaPerception + otherTaxes;
+        var totalInvoice = netSubtotal + totalTaxes;
+
+        var netEl = document.getElementById('footerNetSubtotal');
+        if (netEl) netEl.textContent = '$ ' + netSubtotal.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        var taxesEl = document.getElementById('footerTotalTaxes');
+        if (taxesEl) taxesEl.textContent = '$ ' + totalTaxes.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        var totalEl = document.getElementById('purchaseTotalAmount');
+        if (totalEl) totalEl.textContent = '$ ' + totalInvoice.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     },
 
     handleSavePurchase: async function(event) {
@@ -703,7 +775,7 @@ window.App = {
             var pDateEl = document.getElementById('purchaseDate');
             var purchaseDate = pDateEl ? pDateEl.value : new Date().toISOString().split('T')[0];
 
-            var invNumEl = document.getElementById('purchaseInvoiceNum');
+            var invNumEl = document.getElementById('purchaseInvoice');
             var invoiceNum = invNumEl ? invNumEl.value : 'S/N';
 
             var pStatusEl = document.getElementById('purchasePaymentStatus');
@@ -711,6 +783,9 @@ window.App = {
 
             var pMethodEl = document.getElementById('purchasePaymentMethod');
             var paymentMethod = pMethodEl ? pMethodEl.value : 'Efectivo';
+
+            var pPayDateEl = document.getElementById('purchasePaymentDate');
+            var paymentDate = pPayDateEl ? pPayDateEl.value : purchaseDate;
 
             var rows = document.querySelectorAll('.purchase-item-row');
             var items = [];
@@ -738,28 +813,13 @@ window.App = {
                 return;
             }
 
-            var val = function(ids) {
-                for(var i=0; i<ids.length; i++) {
-                    var el = document.getElementById(ids[i]);
-                    if(el) {
-                        var raw = el.tagName === 'INPUT' || el.tagName === 'SELECT' ? el.value : el.textContent;
-                        var str = String(raw).replace(/\$/g, '').replace(/\s/g, '');
-                        if(str.includes(',') && str.includes('.')) str = str.replace(/\./g, '').replace(',', '.');
-                        else if(str.includes(',')) str = str.replace(',', '.');
-                        str = str.replace(/[^0-9.-]/g, '');
-                        return parseFloat(str) || 0;
-                    }
-                }
-                return 0;
-            };
+            var ivaAmount = parseFloat(document.getElementById('taxIvaAmount')?.value) || 0;
+            var iibbAmount = parseFloat(document.getElementById('taxIibbAmount')?.value) || 0;
+            var ivaPerception = parseFloat(document.getElementById('taxIvaPerception')?.value) || 0;
+            var otherTaxes = parseFloat(document.getElementById('taxOtherTaxes')?.value) || 0;
 
-            var ivaRate = val(['purchaseIvaRate', 'tasaIva', 'ivaRate', 'tasa_iva']) || 21;
-            var iibbRate = val(['purchaseIibbRate', 'tasaIibb', 'iibbRate', 'tasa_iibb']) || 0;
-            var otherTaxes = val(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones', 'otros_impuestos']) || 0;
-
-            var ivaAmount = (calcNetSubtotal * ivaRate) / 100;
-            var iibbAmount = (calcNetSubtotal * iibbRate) / 100;
-            var totalInvoice = calcNetSubtotal + ivaAmount + iibbAmount + otherTaxes;
+            var sumOthers = ivaPerception + otherTaxes;
+            var totalInvoice = calcNetSubtotal + ivaAmount + iibbAmount + sumOthers;
 
             var notesEl = document.getElementById('purchaseNotes');
             var notes = notesEl ? notesEl.value : '';
@@ -771,11 +831,11 @@ window.App = {
                 invoiceNumber: invoiceNum,
                 paymentStatus: paymentStatus,
                 paymentMethod: paymentMethod,
-                paymentDate: purchaseDate,
+                paymentDate: paymentDate,
                 netSubtotal: calcNetSubtotal,
                 ivaAmount: ivaAmount,
                 iibbAmount: iibbAmount,
-                otherTaxes: otherTaxes,
+                otherTaxes: sumOthers,
                 totalInvoice: totalInvoice,
                 notes: notes,
                 items: items
@@ -793,7 +853,8 @@ window.App = {
     renderPurchasesTable: async function() {
         var tbody = document.getElementById('purchasesHistoryTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">Cargando facturas...</td></tr>';
+
+        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">Cargando facturas desde Supabase...</td></tr>';
 
         var purchases = [];
         if (typeof PurchaseManager !== 'undefined' && PurchaseManager.getPurchases) {
@@ -801,7 +862,7 @@ window.App = {
         }
 
         if (purchases.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas para este local.</td></tr>';
             return;
         }
 
@@ -812,11 +873,11 @@ window.App = {
                 '<td class="py-2.5 px-4 font-semibold">' + (p.supplier || '-') + '</td>' +
                 '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-emerald-100 text-emerald-800">✓ ' + p.paymentStatus + '</span></td>' +
                 '<td class="py-2.5 px-3">' + (p.paymentMethod || 'Efectivo') + '</td>' +
-                '<td class="py-2.5 px-3 text-right">$ ' + p.netSubtotal.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
-                '<td class="py-2.5 px-3 text-right">$ ' + p.ivaAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
-                '<td class="py-2.5 px-4 text-right font-black">$ ' + p.totalInvoice.toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + (p.netSubtotal || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-3 text-right">$ ' + (p.ivaAmount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
+                '<td class="py-2.5 px-4 text-right font-black">$ ' + (p.totalInvoice || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-right">' +
-                    '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
+                    '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
                 '</td>' +
             '</tr>';
         }).join('');
@@ -833,8 +894,31 @@ window.App = {
         }
     },
 
-    renderOCHistoryTable: function() {}, renderInventorySheets: function() {}, renderCMVView: function() {}, renderEvolucionProveedor: function() {}, renderUsersTable: function() {},
-    openUserModal: function() {}, closeUserModal: function() {}, openSnapshotModal: function() {}, closeSnapshotModal: function() {}, openCategoryManagerModal: function() {}, closeCategoryManagerModal: function() {}, openPaymentModal: function() {}, closePaymentModal: function() {}, openImportModal: function() {}, closeImportModal: function() {}
+    // Métodos auxiliares y modales secundarios
+    renderOCHistoryTable: function() {},
+    renderInventorySheets: function() {},
+    renderCMVView: function() {},
+    renderEvolucionProveedor: function() {},
+    renderUsersTable: function() {},
+    openUserModal: function() { var m = document.getElementById('userModal'); if(m) m.classList.remove('hidden'); },
+    closeUserModal: function() { var m = document.getElementById('userModal'); if(m) m.classList.add('hidden'); },
+    openSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.remove('hidden'); },
+    closeSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.add('hidden'); },
+    openCategoryManagerModal: function() { var m = document.getElementById('categoryManagerModal'); if(m) m.classList.remove('hidden'); },
+    closeCategoryManagerModal: function() { var m = document.getElementById('categoryManagerModal'); if(m) m.classList.add('hidden'); },
+    openPaymentModal: function() { var m = document.getElementById('paymentModal'); if(m) m.classList.remove('hidden'); },
+    closePaymentModal: function() { var m = document.getElementById('paymentModal'); if(m) m.classList.add('hidden'); },
+    openImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.remove('hidden'); },
+    closeImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.add('hidden'); },
+    handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
+    handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
+    handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
+    saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
+    setInventorySubTab: function(tab) {},
+    switchEvolucionTab: function(tab) {},
+    changePeriod: function(delta) {},
+    handlePeriodChange: function(val) {},
+    loadDemoData: function() { this.showToast('Datos de prueba cargados'); }
 };
 
 window.App = window.App;
