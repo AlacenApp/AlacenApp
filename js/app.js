@@ -65,7 +65,7 @@ window.App = {
     evolucionTab: 'proveedor',
     activeUser: null,
     sidebarHidden: false,
-    _isAddingRow: false, 
+    _isAddingRow: false,
 
     init: function() {
         var today = new Date();
@@ -102,7 +102,6 @@ window.App = {
         this.updateHeaderBusinessInfo();
         this.renderDashboard();
 
-        // Evitar recargas accidentales con Enter
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
                 if (e.target.closest('form')) { e.preventDefault(); }
@@ -244,10 +243,8 @@ window.App = {
     },
 
     // ==========================================
-    // MÓDULO INSUMOS Y PROVEEDORES 
+    // MÓDULO INSUMOS
     // ==========================================
-    // ... [Mantenemos las funciones de insumos y proveedores intactas por el espacio, tal cual las programamos antes]
-
     renderProductsTable: async function() {
         var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
@@ -283,6 +280,9 @@ window.App = {
     handleSaveProduct: async function(e) { e.preventDefault(); this.closeProductModal(); this.renderProductsTable(); },
     deleteProductFromDb: async function(id) { },
 
+    // ==========================================
+    // MÓDULO PROVEEDORES
+    // ==========================================
     renderSuppliersView: async function() {
         var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
@@ -314,7 +314,7 @@ window.App = {
     deleteSupplierFromDb: async function(id) {},
 
     // ==========================================
-    // MÓDULO COMPRAS - TECLADO Y CÁLCULO SEGURO
+    // MÓDULO COMPRAS - TECLADO Y CÁLCULOS MULTI-ID
     // ==========================================
 
     handleRowKeydown: function(e, element, type) {
@@ -374,13 +374,19 @@ window.App = {
             this.addPurchaseRow('', 1, 0, false);
         }
 
-        // Eventos a los inputs del pie de factura para recalcular dinámicamente si el usuario los edita
-        var taxIds = ['purchaseIvaRate', 'purchaseIibbRate', 'purchaseOtherTaxes'];
-        taxIds.forEach(function(id) {
+        var summaryInputIds = [
+            'purchaseIvaRate', 'tasaIva', 'ivaRate',
+            'purchaseIvaAmount', 'montoIva', 'ivaAmount',
+            'purchaseIibbRate', 'tasaIibb', 'iibbRate',
+            'purchaseIibbAmount', 'montoIibb', 'iibbAmount',
+            'purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones'
+        ];
+        summaryInputIds.forEach(function(id) {
             var el = document.getElementById(id);
-            if (el && !el.hasAttribute('data-bound')) {
+            if (el && !el.hasAttribute('data-bound-calc')) {
                 el.addEventListener('input', function() { App.calculatePurchaseTotals(); });
-                el.setAttribute('data-bound', 'true');
+                el.addEventListener('change', function() { App.calculatePurchaseTotals(); });
+                el.setAttribute('data-bound-calc', 'true');
             }
         });
 
@@ -488,34 +494,49 @@ window.App = {
         }
     },
 
-    // EXTRACTOR MATEMÁTICO UNIVERSAL
-    _safeReadNumber: function(id) {
-        var el = document.getElementById(id);
-        if (!el) return 0;
-        
-        var valStr = '';
-        if (el.tagName === 'INPUT') {
-            // Si es un input type="number", el navegador devuelve un float válido
-            if (el.type === 'number') { return parseFloat(el.value) || 0; }
-            valStr = el.value;
-        } else {
-            valStr = el.textContent || '';
+    // EXTRACTORES MATEMÁTICOS MULTI-ID
+    _getElementNumber: function(idArray) {
+        if (!Array.isArray(idArray)) idArray = [idArray];
+        for (var i = 0; i < idArray.length; i++) {
+            var el = document.getElementById(idArray[i]);
+            if (el) {
+                if (el.tagName === 'INPUT' && (el.type === 'number' || el.type === 'range')) {
+                    var val = parseFloat(el.value);
+                    if (!isNaN(val)) return val;
+                }
+                var raw = (el.tagName === 'INPUT' || el.tagName === 'SELECT') ? el.value : el.textContent;
+                if (raw) {
+                    var str = String(raw).trim();
+                    if (str.indexOf(',') !== -1) {
+                        str = str.replace(/\./g, '').replace(',', '.');
+                    }
+                    str = str.replace(/[^0-9.-]/g, '');
+                    var num = parseFloat(str);
+                    if (!isNaN(num)) return num;
+                }
+            }
         }
-        
-        // Limpiamos formatos raros: quitamos $ y puntos de mil, convertimos coma en punto
-        var cleaned = valStr.replace(/\$/g, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-        var parsed = parseFloat(cleaned);
-        return isNaN(parsed) ? 0 : parsed;
+        return 0;
     },
 
-    _safeWriteNumber: function(id, amount) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        if (el.tagName === 'INPUT') {
-            el.value = amount.toFixed(2);
-        } else {
-            el.textContent = '$ ' + amount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
+    _setElementValue: function(idArray, numValue, isCurrency) {
+        if (!Array.isArray(idArray)) idArray = [idArray];
+        var formattedCurrency = '$ ' + numValue.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var formattedNumber = numValue.toFixed(2);
+
+        idArray.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+                if (el.type === 'number') {
+                    el.value = numValue.toFixed(2);
+                } else {
+                    el.value = isCurrency ? formattedCurrency : formattedNumber;
+                }
+            } else {
+                el.textContent = isCurrency ? formattedCurrency : formattedNumber;
+            }
+        });
     },
 
     calculatePurchaseTotals: function() {
@@ -539,24 +560,29 @@ window.App = {
             netSubtotal += rowSub;
         });
 
-        // Escribimos el Subtotal Neto Gravado real
-        this._safeWriteNumber('purchaseSubtotalNet', netSubtotal);
+        var subtotalNetIds = ['purchaseSubtotalNet', 'subtotalNeto', 'purchaseSubtotal', 'subtotal'];
+        this._setElementValue(subtotalNetIds, netSubtotal, true);
 
-        // Extraemos valores manuales o configurados
-        var ivaRate = this._safeReadNumber('purchaseIvaRate') || 21;
-        var iibbRate = this._safeReadNumber('purchaseIibbRate') || 0;
-        var otherTaxes = this._safeReadNumber('purchaseOtherTaxes') || 0;
-
-        // Calculamos montos de impuestos
+        var ivaRateIds = ['purchaseIvaRate', 'tasaIva', 'ivaRate'];
+        var ivaRate = this._getElementNumber(ivaRateIds);
+        if (ivaRate === 0 && !document.getElementById('purchaseIvaRate')) { ivaRate = 21; }
+        
         var ivaAmount = (netSubtotal * ivaRate) / 100;
+        var ivaAmountIds = ['purchaseIvaAmount', 'montoIva', 'ivaAmount'];
+        this._setElementValue(ivaAmountIds, ivaAmount, true);
+
+        var iibbRateIds = ['purchaseIibbRate', 'tasaIibb', 'iibbRate'];
+        var iibbRate = this._getElementNumber(iibbRateIds);
         var iibbAmount = (netSubtotal * iibbRate) / 100;
+        var iibbAmountIds = ['purchaseIibbAmount', 'montoIibb', 'iibbAmount'];
+        this._setElementValue(iibbAmountIds, iibbAmount, true);
 
-        this._safeWriteNumber('purchaseIvaAmount', ivaAmount);
-        this._safeWriteNumber('purchaseIibbAmount', iibbAmount);
+        var otherTaxesIds = ['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones'];
+        var otherTaxes = this._getElementNumber(otherTaxesIds);
 
-        // Total Factura
         var totalInvoice = netSubtotal + ivaAmount + iibbAmount + otherTaxes;
-        this._safeWriteNumber('purchaseTotalInvoice', totalInvoice);
+        var totalInvoiceIds = ['purchaseTotalInvoice', 'totalFactura', 'purchaseTotal', 'total'];
+        this._setElementValue(totalInvoiceIds, totalInvoice, true);
     },
 
     handleSavePurchase: async function(event) {
@@ -612,10 +638,9 @@ window.App = {
                 return;
             }
 
-            // Usamos el extractor seguro al momento de guardar
-            var ivaRate = this._safeReadNumber('purchaseIvaRate') || 21;
-            var iibbRate = this._safeReadNumber('purchaseIibbRate') || 0;
-            var otherTaxes = this._safeReadNumber('purchaseOtherTaxes') || 0;
+            var ivaRate = this._getElementNumber(['purchaseIvaRate', 'tasaIva', 'ivaRate']) || 21;
+            var iibbRate = this._getElementNumber(['purchaseIibbRate', 'tasaIibb', 'iibbRate']) || 0;
+            var otherTaxes = this._getElementNumber(['purchaseOtherTaxes', 'otrosImpuestos', 'percepciones', 'purchasePercepciones']) || 0;
 
             var ivaAmount = (calcNetSubtotal * ivaRate) / 100;
             var iibbAmount = (calcNetSubtotal * iibbRate) / 100;
@@ -694,7 +719,6 @@ window.App = {
         }
     },
 
-    // Handlers
     renderOCHistoryTable: function() {}, renderInventorySheets: function() {}, renderCMVView: function() {}, renderEvolucionProveedor: function() {}, renderUsersTable: function() {},
     openUserModal: function() {}, closeUserModal: function() {}, openSnapshotModal: function() {}, closeSnapshotModal: function() {}, openCategoryManagerModal: function() {}, closeCategoryManagerModal: function() {}, openPaymentModal: function() {}, closePaymentModal: function() {}, openImportModal: function() {}, closeImportModal: function() {}
 };
