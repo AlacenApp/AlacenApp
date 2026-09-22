@@ -508,7 +508,6 @@ window.App = {
     // MÓDULO COMPRAS - TECLADO Y RENGLONES (ÁGIL)
     // ==========================================
 
-    // LÓGICA PRINCIPAL DE NAVEGACIÓN Y CREACIÓN DE FILAS POR TECLADO
     handleRowKeydown: function(e, element, type) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -519,29 +518,29 @@ window.App = {
             var tbody = row.parentElement;
             
             if (type === 'select') {
-                var qty = row.querySelector('.row-qty-input');
-                // Si el selector NO tiene valor y el navegador permite abrir lista nativa (showPicker)
-                if (!element.value && typeof element.showPicker === 'function') {
-                    try { 
-                        element.showPicker(); 
-                    } catch(err) {
-                        // Si falla (o ya estaba abierto y se cerró), salta a cantidad
-                        if (qty) { qty.focus(); qty.select(); }
+                // Si presiona Enter y NO hay nada seleccionado, abre la lista nativamente
+                if (!element.value) {
+                    if (typeof element.showPicker === 'function') {
+                        try { element.showPicker(); } catch(err) {}
                     }
                 } else {
-                    // Si ya seleccionó un producto o quiso saltar, manda el foco a Cantidad
+                    // Si ya seleccionó el producto, el Enter lo manda a Cantidad
+                    var qty = row.querySelector('.row-qty-input');
                     if (qty) { qty.focus(); qty.select(); }
                 }
             } 
-            else if (type === 'qty' || type === 'cost' || type === 'desc') {
-                // Si presionó enter en la cantidad (o costo/descuento)
+            else if (type === 'qty') {
+                // Estando en Cantidad, el Enter lo manda a Precio (Costo)
+                var cost = row.querySelector('.row-cost-input');
+                if (cost) { cost.focus(); cost.select(); }
+            }
+            else if (type === 'cost' || type === 'desc') {
+                // Estando en Precio, el Enter CREA 1 fila o va al siguiente insumo
                 var isLastRow = (row === tbody.lastElementChild);
                 
                 if (isLastRow) {
-                    // Crea SOLO UNA fila nueva automáticamente
                     App.addPurchaseRow('', 1, 0, true);
                 } else {
-                    // O salta al siguiente insumo de abajo
                     var nextRow = row.nextElementSibling;
                     if (nextRow) {
                         var nextSelect = nextRow.querySelector('.row-product-select');
@@ -552,7 +551,6 @@ window.App = {
         }
     },
 
-    // Bloquear que Enter envíe el formulario accidentalmente y recargue la página
     handlePurchaseFormKeydown: function(e) {
         if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') {
             e.preventDefault();
@@ -574,14 +572,12 @@ window.App = {
                     document.getElementById('purchaseTableBody');
         if (tbody) {
             tbody.innerHTML = '';
-            // Insertar fila inicial sin forzar foco (para no molestar al cargar sección)
             this.addPurchaseRow('', 1, 0, false);
         }
         this.calculatePurchaseTotals();
     },
 
     addPurchaseRow: function(defaultProductId, defaultQty, defaultCost, autoFocus) {
-        // MECANISMO ANTI-REBOTE (Evita las filas dobles por clics rápidos o Enter doble)
         if (this._isAddingRow) return;
         this._isAddingRow = true;
         var self = this;
@@ -600,7 +596,6 @@ window.App = {
         var row = document.createElement('tr');
         row.className = 'purchase-item-row table-row-hover text-xs';
 
-        // Estructura limpia: cada campo tiene su identificador "handleRowKeydown" 
         row.innerHTML = 
             '<td class="py-2 px-2.5">' +
                 '<select required onchange="App.updatePurchaseRowProduct(this)" onkeydown="App.handleRowKeydown(event, this, \'select\')" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
@@ -625,7 +620,6 @@ window.App = {
         tbody.appendChild(row);
         this.calculatePurchaseTotals();
         
-        // Enfocar de inmediato el selector de la nueva fila 
         if (autoFocus) {
             var newSelect = row.querySelector('.row-product-select');
             if (newSelect) {
@@ -660,7 +654,6 @@ window.App = {
         }
     },
 
-    // Actualiza precios pero YA NO roba el foco. Permite teclear tranquilamente.
     updatePurchaseRowProduct: function(selectEl) {
         var row = selectEl.closest('tr');
         if (!row) return;
@@ -677,6 +670,9 @@ window.App = {
 
             var unitTd = row.querySelector('.row-unit');
             if (unitTd) unitTd.textContent = unit;
+
+            // NO SE PROGRAMA NINGÚN SALTO AUTOMÁTICO AQUÍ
+            // Esto permite que el usuario siga tecleando "Harina" sin que se le robe el cursor.
         }
         this.calculatePurchaseTotals();
     },
