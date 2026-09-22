@@ -506,6 +506,51 @@ window.App = {
     // ==========================================
     // MÓDULO COMPRAS - FORMULARIO Y RENGLONES
     // ==========================================
+    
+    // GESTIÓN ACTIVA DE TECLADO POR RENGLÓN PARA EVITAR DOBLES FILAS
+    handleRowKeydown: function(e, element, type) {
+        if (e.key === 'Enter') {
+            // Neutralizar el comportamiento nativo del formulario HTML instantáneamente
+            e.preventDefault();
+            e.stopPropagation();
+
+            var row = element.closest('tr');
+            if (!row) return;
+
+            if (type === 'select') {
+                if (!element.value && typeof element.showPicker === 'function') {
+                    // Si está vacío, despliega la lista usando la API nativa de navegadores modernos
+                    try { element.showPicker(); } catch(err) {}
+                } else {
+                    // Si ya tiene algo seleccionado (o no soporta picker), salta a Cantidad
+                    var qty = row.querySelector('.row-qty-input');
+                    if (qty) { qty.focus(); qty.select(); }
+                }
+            } 
+            else if (type === 'qty') {
+                var isLast = (row === row.parentElement.lastElementChild);
+                if (isLast) {
+                    // Si es la última fila, crea SOLO UNA fila nueva automáticamente
+                    App.addPurchaseRow('', 1, 0, true);
+                } else {
+                    // Si no es la última, salta al selector de la fila de abajo
+                    var nextSelect = row.nextElementSibling.querySelector('.row-product-select');
+                    if (nextSelect) nextSelect.focus();
+                }
+            }
+        }
+    },
+
+    // Neutralizar cualquier 'Enter' perdido en el formulario general para que NO cree filas fantasma
+    handlePurchaseFormKeydown: function(e) {
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    },
+    handlePurchaseHeaderKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
+    handlePurchaseRowKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
+
     resetPurchaseForm: function() {
         var form = document.getElementById('purchaseForm');
         if (form) form.reset();
@@ -519,15 +564,17 @@ window.App = {
                     document.getElementById('purchaseTableBody');
         if (tbody) {
             tbody.innerHTML = '';
-            this.addPurchaseRow();
+            // Insertar fila inicial sin forzar foco para no molestar al cargar la página
+            this.addPurchaseRow('', 1, 0, false);
         }
         this.calculatePurchaseTotals();
     },
 
-    addPurchaseRow: function(defaultProductId, defaultQty, defaultCost) {
+    addPurchaseRow: function(defaultProductId, defaultQty, defaultCost, autoFocus) {
         if (defaultProductId === undefined) defaultProductId = '';
         if (defaultQty === undefined) defaultQty = 1;
         if (defaultCost === undefined) defaultCost = 0;
+        if (autoFocus === undefined) autoFocus = true;
 
         var tbody = document.getElementById('purchaseItemsTableBody') || 
                     document.getElementById('purchaseItemsBody') ||
@@ -537,93 +584,37 @@ window.App = {
         var row = document.createElement('tr');
         row.className = 'purchase-item-row table-row-hover text-xs';
 
+        // Estructura HTML con eventos explícitos conectados al teclado y bloqueos
         row.innerHTML = 
             '<td class="py-2 px-2.5">' +
-                '<select required onchange="App.updatePurchaseRowProduct(this)" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
+                '<select required onchange="App.updatePurchaseRowProduct(this)" onkeydown="App.handleRowKeydown(event, this, \'select\')" class="row-product-select w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1.5 text-xs">' +
                     '<option value="">Cargando insumos...</option>' +
                 '</select>' +
             '</td>' +
             '<td class="py-2 px-2 text-center text-slate-500 font-bold row-unit">u.</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="' + defaultQty + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-qty-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
             '</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="' + defaultCost + '" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-cost-input w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
             '</td>' +
             '<td class="py-2 px-2">' +
-                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
+                '<input type="number" step="any" min="0" value="0" oninput="App.calculatePurchaseTotals()" onkeydown="App.handleRowKeydown(event, this, \'qty\')" class="row-discount-val w-full bg-slate-50 border rounded-lg px-2 py-1.5 text-xs">' +
             '</td>' +
             '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
             '<td class="py-2 px-2 text-center">' +
                 '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
             '</td>';
 
-        // Escuchar eventos de teclado en este renglón
-        row.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                var target = e.target;
-
-                // 1. Enter sobre la lista de Insumos
-                if (target && target.classList.contains('row-product-select')) {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    if (!target.value && typeof target.showPicker === 'function') {
-                        try { target.showPicker(); } catch(err) {}
-                    } else {
-                        var qtyInp = row.querySelector('.row-qty-input');
-                        if (qtyInp) {
-                            qtyInp.focus();
-                            qtyInp.select();
-                        }
-                    }
-                    return;
-                }
-
-                // 2. Enter sobre la Cantidad
-                if (target && target.classList.contains('row-qty-input')) {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    var parentTbody = row.parentElement;
-                    var isLastRow = parentTbody ? (row === parentTbody.lastElementChild) : true;
-
-                    if (isLastRow) {
-                        App.addPurchaseRow();
-                    } else {
-                        var nextRow = row.nextElementSibling;
-                        if (nextRow) {
-                            var nextSelect = nextRow.querySelector('.row-product-select');
-                            if (nextSelect) nextSelect.focus();
-                        }
-                    }
-                    return;
-                }
-
-                // 3. Enter sobre Costo o Descuento
-                if (target && (target.classList.contains('row-cost-input') || target.classList.contains('row-discount-val'))) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    var pTbody = row.parentElement;
-                    if (pTbody && row === pTbody.lastElementChild) {
-                        App.addPurchaseRow();
-                    } else if (row.nextElementSibling) {
-                        var ns = row.nextElementSibling.querySelector('.row-product-select');
-                        if (ns) ns.focus();
-                    }
-                }
-            }
-        });
-
         tbody.appendChild(row);
         this.calculatePurchaseTotals();
-
-        // Posicionar cursor automáticamente en el selector de la fila recién creada
-        var selectEl = row.querySelector('.row-product-select');
-        if (selectEl) {
-            setTimeout(function() {
-                selectEl.focus();
-            }, 50);
+        
+        // Enfocar el selector nuevo solo si autoFocus es verdadero
+        if (autoFocus) {
+            var newSelect = row.querySelector('.row-product-select');
+            if (newSelect) {
+                setTimeout(function() { newSelect.focus(); }, 10);
+            }
         }
 
         this._populateRowProducts(row, defaultProductId);
@@ -866,9 +857,6 @@ window.App = {
     },
 
     // Handlers y Modales secundarios
-    handlePurchaseFormKeydown: function(e) { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); } },
-    handlePurchaseHeaderKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
-    handlePurchaseRowKeydown: function(e) { this.handlePurchaseFormKeydown(e); },
     renderOCHistoryTable: function() {},
     renderInventorySheets: function() {},
     renderCMVView: function() {},
