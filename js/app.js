@@ -116,6 +116,7 @@ window.App = {
         else if (this.currentView === 'compras-nueva') { this.resetPurchaseForm(); } 
         else if (this.currentView === 'compras-historial') { await this.renderPurchasesTable(); } 
         else if (this.currentView === 'dashboard') { this.renderDashboard(); }
+        else if (this.currentView === 'ajustes') { await this.renderUsersTable(); }
     },
 
     updateHeaderBusinessInfo: function() {
@@ -208,7 +209,8 @@ window.App = {
             'compras-nueva': { title: 'Cargar Factura / Gasto', sub: 'Liquidación impositiva y estado de pago' },
             'proveedores': { title: 'Directorio de Proveedores', sub: 'Fichas comerciales y datos fiscales' },
             'productos': { title: 'Insumos y Categorías', sub: 'Catálogo de existencias y costos' },
-            'compras-historial': { title: 'Historial de Pagos', sub: 'Registro de facturas y cuentas a pagar' }
+            'compras-historial': { title: 'Historial de Pagos', sub: 'Registro de facturas y cuentas a pagar' },
+            'ajustes': { title: 'Configuración & Backups', sub: 'Control de usuarios y respaldos' }
         };
 
         var pageTitle = document.getElementById('pageTitle');
@@ -235,6 +237,148 @@ window.App = {
         var dashStockValEl = document.getElementById('dashTotalStockValue');
         if (dashStockValEl) dashStockValEl.textContent = '$ 0.00';
     },
+
+    // ==========================================
+    // MÓDULO LOCALES Y USUARIOS
+    // ==========================================
+    openLocalModal: function() {
+        var form = document.getElementById('localForm');
+        if (form) form.reset();
+        var modal = document.getElementById('localModal');
+        if (modal) modal.classList.remove('hidden');
+    },
+
+    closeLocalModal: function() {
+        var modal = document.getElementById('localModal');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    handleSaveLocal: async function(event) {
+        if (event) event.preventDefault();
+        try {
+            var inputNombre = document.getElementById('localFormNombre');
+            var inputDireccion = document.getElementById('localFormDireccion');
+
+            var nombre = inputNombre ? inputNombre.value.trim() : '';
+            var direccion = inputDireccion ? inputDireccion.value.trim() : '';
+
+            if (!nombre) {
+                alert("Por favor ingresa un nombre para el local.");
+                return;
+            }
+
+            if (!window.db) throw new Error("No hay conexión activa con Supabase");
+
+            var res = await window.db.from('Locales').insert([{
+                nombre_local: nombre,
+                direccion: direccion
+            }]).select();
+
+            if (res.error) {
+                throw new Error(res.error.message);
+            }
+
+            this.showToast('¡Local creado exitosamente!', 'success');
+            this.closeLocalModal();
+
+            if (typeof cargarLocalesDelUsuario === 'function') {
+                await cargarLocalesDelUsuario();
+            }
+        } catch (err) {
+            alert("Error al crear local: " + err.message);
+        }
+    },
+
+    openUserModal: function() {
+        var form = document.getElementById('userForm');
+        if (form) form.reset();
+        var modal = document.getElementById('userModal');
+        if (modal) modal.classList.remove('hidden');
+    },
+
+    closeUserModal: function() {
+        var modal = document.getElementById('userModal');
+        if (modal) modal.classList.add('hidden');
+    },
+
+    handleSaveUser: async function(event) {
+        if (event) event.preventDefault();
+        try {
+            var name = document.getElementById('usrFormName')?.value.trim();
+            var username = document.getElementById('usrFormUsername')?.value.trim();
+            var pin = document.getElementById('usrFormPin')?.value.trim();
+            var role = document.getElementById('usrFormRole')?.value;
+
+            if (!name || !username) {
+                alert("Por favor completa los campos requeridos.");
+                return;
+            }
+
+            if (!window.db) throw new Error("Sin conexión a Supabase");
+
+            var res = await window.db.from('Perfiles').insert([{
+                nombre: name,
+                usuario: username,
+                pin: pin,
+                rol: role || 'admin'
+            }]);
+
+            if (res.error) {
+                // Si la tabla Perfiles difiere, intentar guardar en Usuarios
+                var res2 = await window.db.from('Usuarios').insert([{
+                    nombre: name,
+                    email: username,
+                    rol: role || 'admin'
+                }]);
+                if (res2.error) throw new Error(res2.error.message);
+            }
+
+            this.showToast('¡Usuario creado correctamente!', 'success');
+            this.closeUserModal();
+            await this.renderUsersTable();
+        } catch (err) {
+            alert("Error al guardar usuario: " + err.message);
+        }
+    },
+
+    renderUsersTable: async function() {
+        var tbody = document.getElementById('usersTableBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Cargando usuarios...</td></tr>';
+
+        if (!window.db) return;
+        var res = await window.db.from('Perfiles').select('*');
+        var users = res.data || [];
+
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">No hay usuarios registrados.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = users.map(function(u) {
+            return '<tr class="text-xs border-b">' +
+                '<td class="py-2.5 px-3 font-bold">' + (u.usuario || u.email || '-') + '</td>' +
+                '<td class="py-2.5 px-3">' + (u.nombre || '-') + '</td>' +
+                '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-indigo-100 text-indigo-800">' + (u.rol || 'admin') + '</span></td>' +
+                '<td class="py-2.5 px-3 text-center font-mono">••••</td>' +
+                '<td class="py-2.5 px-3 text-right"><button onclick="App.deleteUserFromDb(\'' + u.id + '\')" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can"></i></button></td>' +
+            '</tr>';
+        }).join('');
+    },
+
+    deleteUserFromDb: async function(id) {
+        if (!confirm('¿Deseas eliminar este usuario?')) return;
+        try {
+            await window.db.from('Perfiles').delete().eq('id', id);
+            this.showToast('Usuario eliminado');
+            await this.renderUsersTable();
+        } catch (e) {
+            alert(e.message);
+        }
+    },
+
+    handleUserRoleChange: function(val) {},
 
     // ==========================================
     // MÓDULO INSUMOS
@@ -269,8 +413,8 @@ window.App = {
                 '<td class="py-2.5 px-3 text-slate-500">' + (p.category || '-') + '</td>' +
                 '<td class="py-2.5 px-3">Principal</td>' +
                 '<td class="py-2.5 px-2 text-center font-medium">' + (p.unit || 'u.') + '</td>' +
-                '<td class="py-2.5 px-3 text-right font-black">' + p.currentStock + '</td>' +
-                '<td class="py-2.5 px-3 text-right text-slate-400">' + p.minStock + '</td>' +
+                '<td class="py-2.5 px-3 text-right font-black">' + (p.currentStock || 0) + '</td>' +
+                '<td class="py-2.5 px-3 text-right text-slate-400">' + (p.minStock || 0) + '</td>' +
                 '<td class="py-2.5 px-3 text-right">$ ' + (p.costPrice || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-right font-bold">$ ' + ((p.currentStock || 0) * (p.costPrice || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>' +
@@ -899,9 +1043,6 @@ window.App = {
     renderInventorySheets: function() {},
     renderCMVView: function() {},
     renderEvolucionProveedor: function() {},
-    renderUsersTable: function() {},
-    openUserModal: function() { var m = document.getElementById('userModal'); if(m) m.classList.remove('hidden'); },
-    closeUserModal: function() { var m = document.getElementById('userModal'); if(m) m.classList.add('hidden'); },
     openSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.remove('hidden'); },
     closeSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.add('hidden'); },
     openCategoryManagerModal: function() { var m = document.getElementById('categoryManagerModal'); if(m) m.classList.remove('hidden'); },
@@ -910,7 +1051,6 @@ window.App = {
     closePaymentModal: function() { var m = document.getElementById('paymentModal'); if(m) m.classList.add('hidden'); },
     openImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.remove('hidden'); },
     closeImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.add('hidden'); },
-    handleSaveUser: function(e) { e.preventDefault(); this.closeUserModal(); },
     handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
     handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
     saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
