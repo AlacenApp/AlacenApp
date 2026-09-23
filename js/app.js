@@ -115,8 +115,8 @@ window.App = {
         else if (this.currentView === 'proveedores') { await this.renderSuppliersView(); } 
         else if (this.currentView === 'compras-nueva') { this.resetPurchaseForm(); } 
         else if (this.currentView === 'compras-historial') { await this.renderPurchasesTable(); } 
-        else if (this.currentView === 'dashboard') { this.renderDashboard(); }
         else if (this.currentView === 'ajustes') { await this.renderUsersTable(); }
+        else if (this.currentView === 'dashboard') { this.renderDashboard(); }
     },
 
     updateHeaderBusinessInfo: function() {
@@ -289,9 +289,30 @@ window.App = {
         }
     },
 
-    openUserModal: function() {
+    openUserModal: async function() {
         var form = document.getElementById('userForm');
         if (form) form.reset();
+        
+        // Cargar lista actualizada de locales
+        var localSelect = document.getElementById('usrFormLocal');
+        if (localSelect && window.db) {
+            localSelect.innerHTML = '<option value="">Cargando locales...</option>';
+            try {
+                var res = await window.db.from('Locales').select('*').order('nombre_local', { ascending: true });
+                if (res.data && res.data.length > 0) {
+                    localSelect.innerHTML = '<option value="">-- Seleccionar Local --</option>' +
+                        res.data.map(function(l) { 
+                            return '<option value="' + l.id + '">' + l.nombre_local + '</option>'; 
+                        }).join('');
+                } else {
+                    localSelect.innerHTML = '<option value="">Sin locales registrados</option>';
+                }
+            } catch (e) {
+                console.error("Error al cargar locales:", e);
+                localSelect.innerHTML = '<option value="">Error al cargar locales</option>';
+            }
+        }
+
         var modal = document.getElementById('userModal');
         if (modal) modal.classList.remove('hidden');
     },
@@ -308,32 +329,56 @@ window.App = {
             var username = document.getElementById('usrFormUsername')?.value.trim();
             var pin = document.getElementById('usrFormPin')?.value.trim();
             var role = document.getElementById('usrFormRole')?.value;
+            var localId = document.getElementById('usrFormLocal')?.value;
 
-            if (!name || !username) {
-                alert("Por favor completa los campos requeridos.");
+            if (!name || !username || !pin) {
+                alert("Por favor completa el nombre, usuario y contraseña.");
                 return;
             }
 
-            if (!window.db) throw new Error("Sin conexión a Supabase");
+            if (!localId) {
+                alert("Por favor selecciona un local para asignar al usuario.");
+                return;
+            }
 
+            if (!window.db) throw new Error("Sin conexión activa con Supabase");
+
+            // 1. Guardar el nuevo perfil de usuario en Supabase
             var res = await window.db.from('Perfiles').insert([{
                 nombre: name,
                 usuario: username,
                 pin: pin,
                 rol: role || 'admin'
-            }]);
+            }]).select().single();
 
+            var perfilId = null;
             if (res.error) {
-                // Si la tabla Perfiles difiere, intentar guardar en Usuarios
                 var res2 = await window.db.from('Usuarios').insert([{
                     nombre: name,
                     email: username,
                     rol: role || 'admin'
-                }]);
-                if (res2.error) throw new Error(res2.error.message);
+                }]).select().single();
+
+                if (res2.error) throw new Error("Error al guardar usuario: " + res.error.message);
+                perfilId = res2.data ? res2.data.id : null;
+            } else {
+                perfilId = res.data ? res.data.id : null;
             }
 
-            this.showToast('¡Usuario creado correctamente!', 'success');
+            // 2. Asociar el usuario con el local seleccionado
+            if (perfilId && localId) {
+                var parsedLocalId = parseInt(localId, 10);
+                var relRes = await window.db.from('Usuarios_Locales').insert([{
+                    perfil_id: perfilId,
+                    local_id: isNaN(parsedLocalId) ? localId : parsedLocalId
+                }]);
+
+                if (relRes.error) {
+                    console.warn("Aviso al vincular local:", relRes.error.message);
+                }
+            }
+
+            this.showToast('¡Usuario creado y local asignado correctamente!', 'success');
             this.closeUserModal();
             await this.renderUsersTable();
         } catch (err) {
@@ -357,11 +402,11 @@ window.App = {
         }
 
         tbody.innerHTML = users.map(function(u) {
-            return '<tr class="text-xs border-b">' +
+            return '<tr class="text-xs border-b table-row-hover">' +
                 '<td class="py-2.5 px-3 font-bold">' + (u.usuario || u.email || '-') + '</td>' +
                 '<td class="py-2.5 px-3">' + (u.nombre || '-') + '</td>' +
-                '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-indigo-100 text-indigo-800">' + (u.rol || 'admin') + '</span></td>' +
-                '<td class="py-2.5 px-3 text-center font-mono">••••</td>' +
+                '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded font-bold text-[10px] bg-indigo-100 text-indigo-800 uppercase">' + (u.rol || 'admin') + '</span></td>' +
+                '<td class="py-2.5 px-3 text-center font-mono">' + (u.pin || '••••') + '</td>' +
                 '<td class="py-2.5 px-3 text-right"><button onclick="App.deleteUserFromDb(\'' + u.id + '\')" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can"></i></button></td>' +
             '</tr>';
         }).join('');
@@ -386,7 +431,7 @@ window.App = {
     renderProductsTable: async function() {
         var tbody = document.getElementById('productsTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos desde Supabase...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">Cargando insumos...</td></tr>';
         
         var products = [];
         if (typeof ProductManager !== 'undefined' && ProductManager.getProducts) {
@@ -402,7 +447,7 @@ window.App = {
         }
 
         if (products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos para este local.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="py-8 text-center text-slate-400">No hay insumos.</td></tr>';
             return;
         }
 
@@ -419,19 +464,17 @@ window.App = {
                 '<td class="py-2.5 px-3 text-right font-bold">$ ' + ((p.currentStock || 0) * (p.costPrice || 0)).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-center"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>' +
                 '<td class="py-2.5 px-3 text-right">' +
-                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td>' +
-            '</tr>';
+                    '<button onclick="App.openProductModal(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteProductFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td></tr>';
         }).join('');
     },
 
     openProductModal: async function(productId) {
         var form = document.getElementById('productForm');
         if (form) form.reset();
-
         document.getElementById('prodFormId').value = productId || '';
-        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo / Mercadería';
+        document.getElementById('productModalTitle').textContent = productId ? 'Editar Insumo' : 'Nuevo Insumo';
         await this.populateDropdowns();
 
         if (productId) {
@@ -497,7 +540,7 @@ window.App = {
     renderSuppliersView: async function() {
         var tbody = document.getElementById('suppliersTableBody');
         if (!tbody) return;
-        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores desde Supabase...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Cargando proveedores...</td></tr>';
         
         var suppliers = [];
         if (typeof SupplierManager !== 'undefined' && SupplierManager.getSuppliers) {
@@ -516,7 +559,7 @@ window.App = {
         if (badge) badge.textContent = suppliers.length + ' proveedores';
 
         if (suppliers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores para este local.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">No hay proveedores.</td></tr>';
             return;
         }
 
@@ -530,17 +573,15 @@ window.App = {
                 '<td class="py-3 px-3">' + (s.paymentMethods || '-') + '</td>' +
                 '<td class="py-3 px-2 text-center">--</td>' +
                 '<td class="py-3 px-4 text-right">' +
-                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button> ' +
-                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
-                '</td>' +
-            '</tr>';
+                    '<button onclick="App.openSupplierModal(\'' + s.id + '\')" class="p-1 text-slate-500 hover:text-teal-600"><i class="fa-solid fa-pen-to-square"></i></button> ' +
+                    '<button onclick="App.deleteSupplierFromDb(\'' + s.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
+                '</td></tr>';
         }).join('');
     },
 
     openSupplierModal: async function(supplierId) {
         var form = document.getElementById('supplierForm');
         if (form) form.reset();
-
         document.getElementById('supFormId').value = supplierId || '';
         document.getElementById('supplierModalTitle').textContent = supplierId ? 'Editar Proveedor' : 'Nuevo Proveedor';
 
@@ -612,11 +653,6 @@ window.App = {
             e.stopPropagation();
         }
     },
-
-    handlePurchaseDateChange: function(val) {},
-    handlePurchaseSupplierChange: function(val) {},
-    handlePurchasePaymentStatusChange: function(val) {},
-    cancelPurchaseEdit: function() {},
 
     handleRowKeydown: function(e, element, type) {
         if (e.key === 'Enter') {
@@ -722,7 +758,7 @@ window.App = {
             '</td>' +
             '<td class="py-2 px-3 text-right font-black text-slate-800 row-subtotal">$ 0.00</td>' +
             '<td class="py-2 px-2 text-center">' +
-                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600" title="Eliminar renglón"><i class="fa-solid fa-trash-can"></i></button>' +
+                '<button type="button" onclick="App.removePurchaseRow(this)" class="text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
             '</td>';
 
         tbody.appendChild(row);
@@ -789,7 +825,7 @@ window.App = {
     },
 
     // ====================================================
-    // CÁLCULO DE TOTALES DE LA FACTURA (IDs EXACTOS DEL HTML)
+    // CÁLCULO DE TOTALES DE LA FACTURA
     // ====================================================
 
     calculatePurchaseTotals: function() {
@@ -1006,7 +1042,7 @@ window.App = {
         }
 
         if (purchases.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas para este local.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-400">No hay facturas cargadas.</td></tr>';
             return;
         }
 
@@ -1021,7 +1057,7 @@ window.App = {
                 '<td class="py-2.5 px-3 text-right">$ ' + (p.ivaAmount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-4 text-right font-black">$ ' + (p.totalInvoice || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 }) + '</td>' +
                 '<td class="py-2.5 px-3 text-right">' +
-                    '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600" title="Eliminar"><i class="fa-solid fa-trash-can"></i></button>' +
+                    '<button onclick="App.deletePurchaseFromDb(\'' + p.id + '\')" class="p-1 text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>' +
                 '</td>' +
             '</tr>';
         }).join('');
@@ -1036,29 +1072,7 @@ window.App = {
         } catch (e) {
             alert(e.message);
         }
-    },
-
-    // Métodos auxiliares y modales secundarios
-    renderOCHistoryTable: function() {},
-    renderInventorySheets: function() {},
-    renderCMVView: function() {},
-    renderEvolucionProveedor: function() {},
-    openSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.remove('hidden'); },
-    closeSnapshotModal: function() { var m = document.getElementById('snapshotModal'); if(m) m.classList.add('hidden'); },
-    openCategoryManagerModal: function() { var m = document.getElementById('categoryManagerModal'); if(m) m.classList.remove('hidden'); },
-    closeCategoryManagerModal: function() { var m = document.getElementById('categoryManagerModal'); if(m) m.classList.add('hidden'); },
-    openPaymentModal: function() { var m = document.getElementById('paymentModal'); if(m) m.classList.remove('hidden'); },
-    closePaymentModal: function() { var m = document.getElementById('paymentModal'); if(m) m.classList.add('hidden'); },
-    openImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.remove('hidden'); },
-    closeImportModal: function() { var m = document.getElementById('importModal'); if(m) m.classList.add('hidden'); },
-    handleSavePayment: function(e) { e.preventDefault(); this.closePaymentModal(); },
-    handleSaveCategory: function(e) { e.preventDefault(); this.closeCategoryManagerModal(); },
-    saveSettings: function(e) { e.preventDefault(); this.showToast('Configuración guardada'); },
-    setInventorySubTab: function(tab) {},
-    switchEvolucionTab: function(tab) {},
-    changePeriod: function(delta) {},
-    handlePeriodChange: function(val) {},
-    loadDemoData: function() { this.showToast('Datos de prueba cargados'); }
+    }
 };
 
 window.App = window.App;
